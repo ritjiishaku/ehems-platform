@@ -128,7 +128,12 @@ function SiteFooter() {
       <div className="mx-auto max-w-6xl xl:max-w-7xl px-6 py-12 sm:py-16">
         <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-4">
           <div className="lg:col-span-2">
-            <p className="text-2xl text-on-surface font-extrabold tracking-wide">EHEMS</p>
+            <Link
+              href="/"
+              className="text-2xl font-extrabold tracking-wide text-on-surface transition-opacity hover:opacity-80"
+            >
+              EHEMS
+            </Link>
             <p className="body-medium text-on-surface-variant mt-3 max-w-prose">
               Emerging Healthcare Entrepreneurs Meeting Space. Practical learning, credible
               progress, and a community of healthcare workers building real businesses in Nigeria.

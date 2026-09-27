@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import Image from 'next/image';
 import { Eyebrow } from '@/components/ui/eyebrow';
 import { LinkButton } from '@/components/ui/button';
@@ -122,7 +123,11 @@ export function Hero() {
             className="bg-gradient-to-tl from-primary/70 to-transparent absolute -top-6 -right-6 h-full w-full rounded-3xl"
           />
 
-          <div className="border-outline-variant bg-gradient-to-br from-surface-container-lowest to-primary-container relative rounded-3xl border p-6 sm:p-10">
+          <Link
+            href="/"
+            title="EHEMS Home"
+            className="border-outline-variant bg-gradient-to-br from-surface-container-lowest to-primary-container relative block rounded-3xl border p-6 transition-opacity hover:opacity-90 sm:p-10"
+          >
             <Image
               src="/ehems-logo-creative.svg"
               alt="EHEMS"
@@ -131,7 +136,7 @@ export function Hero() {
               priority
               className="h-auto w-full"
             />
-          </div>
+          </Link>
         </div>
       </div>
     </Band>

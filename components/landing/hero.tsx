@@ -79,7 +79,7 @@ export function Hero() {
               (D-17). `shadow-md` gives it a plain elevation - a glow here read as a
               halo around a solid button, which is not the depth a CTA wants.
             */}
-            <LinkButton href="#join" variant="primary" size="lg" block className="shadow-md">
+            <LinkButton href="/register" variant="primary" size="lg" block className="shadow-md">
               Get started
             </LinkButton>
             <LinkButton href="#programmes" variant="ghost" size="lg" block>

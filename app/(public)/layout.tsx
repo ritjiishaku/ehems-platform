@@ -29,26 +29,27 @@ import { Eyebrow } from '@/components/ui/eyebrow';
  */
 
 const NAV = [
-  { href: '#programmes', label: 'What you get' },
-  { href: '#why', label: 'Why EHEMS' },
-  { href: '#join', label: 'How to join' },
+  { href: '/#programmes', label: 'What you get' },
+  { href: '/#why', label: 'Why EHEMS' },
+  { href: '/#join', label: 'How to join' },
+  { href: '/login', label: 'Sign in' },
 ];
 
 const FOOTER_GROUPS = [
   {
     label: 'Explore',
     links: [
-      { href: '#programmes', label: 'What you get' },
-      { href: '#why', label: 'Why EHEMS' },
-      { href: '#join', label: 'How to join' },
+      { href: '/#programmes', label: 'What you get' },
+      { href: '/#why', label: 'Why EHEMS' },
+      { href: '/#join', label: 'How to join' },
     ],
   },
   {
     label: 'Membership',
     links: [
-      { href: '#join', label: 'Start free' },
-      { href: '#why', label: 'How payments work' },
-      { href: '#programmes', label: 'Certification' },
+      { href: '/register', label: 'Start free' },
+      { href: '/login', label: 'Sign in' },
+      { href: '/dashboard', label: 'Member Dashboard' },
     ],
   },
 ];
@@ -113,7 +114,7 @@ function SiteHeader() {
 
         {/* Not "Get started": `test/landing-page.test.tsx` resolves that name
             with getByRole, which throws on a second match. The hero owns it. */}
-        <LinkButton href="#join" variant="primary" size="sm" className="shadow-sm">
+        <LinkButton href="/register" variant="primary" size="sm" className="shadow-sm">
           Join free
         </LinkButton>
       </div>

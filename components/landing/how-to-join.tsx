@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { cn } from '@/lib/cn';
 import { Eyebrow } from '@/components/ui/eyebrow';
 import { Section } from '@/components/ui/section';
@@ -71,6 +72,16 @@ export function HowToJoin() {
                   <p className="body-large text-on-surface-variant mt-2.5 text-pretty">
                     {step.body}
                   </p>
+                  {index === 0 && (
+                    <div className="mt-4">
+                      <Link
+                        href="/register"
+                        className="label-medium text-primary hover:text-on-surface font-semibold underline underline-offset-4 transition-colors"
+                      >
+                        Register your account →
+                      </Link>
+                    </div>
+                  )}
                 </div>
               </div>
             </li>

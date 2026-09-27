@@ -47,11 +47,11 @@ export function ClosingCta() {
           </p>
 
           <div className="mt-9 flex flex-col gap-3 sm:flex-row">
-            <LinkButton href="#join" variant="secondary" size="lg" block>
-              Read the programme guide
+            <LinkButton href="/register" variant="secondary" size="lg" block>
+              Create free account
             </LinkButton>
-            <LinkButton href="#programmes" variant="inverse" size="lg" block>
-              See what you get
+            <LinkButton href="/login" variant="inverse" size="lg" block>
+              Sign in to dashboard
             </LinkButton>
           </div>
         </div>

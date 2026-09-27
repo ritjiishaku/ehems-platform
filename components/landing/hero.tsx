@@ -31,7 +31,7 @@ export function Hero() {
       labelledBy="hero-heading"
       tone="background"
       width="wide"
-      className="relative pt-12 pb-16 sm:pt-16 sm:pb-20"
+      className="hero-viewport-height relative flex flex-col justify-center py-8 sm:py-12 lg:py-16"
     >
       {/*
         A tricolour rule along the top edge. This is the hero's one piece of

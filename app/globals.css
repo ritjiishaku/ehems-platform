@@ -179,6 +179,11 @@
   box-shadow: var(--shadow-lg), var(--shadow-glow-tertiary);
 }
 
+@utility hero-viewport-height {
+  min-height: calc(100vh - 4rem);
+  min-height: calc(100dvh - 4rem);
+}
+
 /* ------------------------------------------------------ decorative accents */
 
 /**

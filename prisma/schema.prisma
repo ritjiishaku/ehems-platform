@@ -1,0 +1,391 @@
+// =============================================================================
+// EHEMS Platform — Prisma Schema (Phase 2A)
+//
+// ONLY unblocked entities are modelled here. Blocked entities wait for their
+// respective decisions in docs/decisions.md:
+//
+//   D-3  / D-12 → Role, RolePermission, Permission         (Phase 2B)
+//   D-4         → Enrolment, AttendanceRecord              (Phase 2B)
+//   D-5         → Tier seed, MemberCertificate catalogue   (Phase 2B)
+//   D-1  / D-8  → Payment, PaymentAuditEntry              (Phase 8)
+//
+// Conventions (AGENTS.md §7):
+//   - All field names snake_case via @map; relation names camelCase in code
+//   - Money is Int kobo; dates are stored UTC
+//   - Every model has an explicit @@map for the SQL table name
+//   - Every relation has a named back-reference on BOTH sides
+//   - Soft-delete via deleted_at; personal data has data_retention_until
+//   - AuditLog is append-only — a DB trigger enforces this (see migration)
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// User
+// ---------------------------------------------------------------------------
+// Soft-deleted via deleted_at. data_retention_until anchors erasure to a
+// fixed date (never "N days from last activity") per SEC-016 and Phase 2A
+// guidance in docs/implementation-plan.md.
+//
+// phone is nullable because it is not captured at registration in Phase 1;
+// it will be added to the profile step in Phase 5. Nigerian format enforced
+// in lib/validation/ not here.
+// ---------------------------------------------------------------------------
+model User {
+  id                  String    @id @default(cuid()) @map("id")
+  email               String    @unique @map("email")
+  name                String    @map("name")
+  phone               String?   @map("phone")
+  passwordHash        String    @map("password_hash")
+  // role is a plain String for Phase 1. Phase 2B will add a Role model and a
+  // foreign key once D-3 is resolved. The value stays "member" | "admin" |
+  // "super-admin" until then — matching the UserRole type in lib/auth.ts.
+  role                String    @default("member") @map("role")
+  deletedAt           DateTime? @map("deleted_at")
+  dataRetentionUntil  DateTime? @map("data_retention_until")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+
+  sessions            Session[]
+  consentRecords      ConsentRecord[]
+  dataSubjectRequests DataSubjectRequest[]
+  notifications       Notification[]
+  actorAuditLogs      AuditLog[]           @relation("AuditLogActor")
+
+  @@index([email])
+  @@index([deletedAt])
+  @@map("user")
+}
+
+// ---------------------------------------------------------------------------
+// Session
+// ---------------------------------------------------------------------------
+// Replaces the in-memory USERS Map in lib/auth.ts. The session cookie stores
+// the session ID; tokenHash stores a SHA-256 of the random token so the raw
+// token never touches the DB. Rotating the session on login and privilege
+// change: delete old row, insert new.
+//
+// absoluteExpiresAt caps sessions at 30 days regardless of activity
+// (D-14 proposed default; see docs/decisions.md).
+// ---------------------------------------------------------------------------
+model Session {
+  id               String   @id @default(cuid()) @map("id")
+  userId           String   @map("user_id")
+  tokenHash        String   @unique @map("token_hash")
+  createdAt        DateTime @default(now()) @map("created_at")
+  expiresAt        DateTime @map("expires_at")
+  absoluteExpiresAt DateTime @map("absolute_expires_at")
+  ipAddress        String?  @map("ip_address")
+  userAgent        String?  @map("user_agent")
+
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tokenHash])
+  @@index([expiresAt])
+  @@map("session")
+}
+
+// ---------------------------------------------------------------------------
+// ConsentRecord  (SEC-011, SEC-012)
+// ---------------------------------------------------------------------------
+// Captured at registration with version, text, timestamp, IP, and user agent.
+// withdrawnAt is set on withdrawal — the row is NEVER deleted.
+// A new row is inserted whenever consent is re-granted after withdrawal.
+// ---------------------------------------------------------------------------
+model ConsentRecord {
+  id             String    @id @default(cuid()) @map("id")
+  userId         String    @map("user_id")
+  consentVersion String    @map("consent_version")
+  consentText    String    @map("consent_text")
+  capturedAt     DateTime  @default(now()) @map("captured_at")
+  ipAddress      String?   @map("ip_address")
+  userAgent      String?   @map("user_agent")
+  withdrawnAt    DateTime? @map("withdrawn_at")
+
+  user           User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([userId])
+  @@index([withdrawnAt])
+  @@map("consent_record")
+}
+
+// ---------------------------------------------------------------------------
+// AuditLog  (SEC-007, SEC-015)
+// ---------------------------------------------------------------------------
+// Append-only. The migration adds a trigger that REJECTs UPDATE and DELETE,
+// and the application role has TRUNCATE revoked. No UPDATE or DELETE on this
+// table — ever.
+//
+// Reading the audit log is itself an audited action: the read is recorded by
+// the caller before displaying results.
+// ---------------------------------------------------------------------------
+model AuditLog {
+  id         String   @id @default(cuid()) @map("id")
+  action     String   @map("action")
+  actorId    String?  @map("actor_id")
+  entityType String   @map("entity_type")
+  entityId   String   @map("entity_id")
+  metadata   Json?    @map("metadata")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  actor      User?    @relation("AuditLogActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([actorId])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("audit_log")
+}
+
+// ---------------------------------------------------------------------------
+// DataSubjectRequest  (SEC-013)
+// ---------------------------------------------------------------------------
+// First-class record for NDPA data-subject rights: access, rectification,
+// erasure, restriction, portability, objection.
+// requestType uses a plain String; lib/validation/ enforces the enum values.
+// ---------------------------------------------------------------------------
+model DataSubjectRequest {
+  id          String    @id @default(cuid()) @map("id")
+  userId      String    @map("user_id")
+  requestType String    @map("request_type")
+  status      String    @default("pending") @map("status")
+  handlingNotes String? @map("handling_notes")
+  resolvedAt  DateTime? @map("resolved_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  user        User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([userId])
+  @@index([status])
+  @@map("data_subject_request")
+}
+
+// ---------------------------------------------------------------------------
+// BreachIncident  (SEC-014)
+// ---------------------------------------------------------------------------
+// The 72-hour NDPC notification window is tracked explicitly via
+// ndpcNotifiedAt. The application computes the window from detectedAt.
+// ---------------------------------------------------------------------------
+model BreachIncident {
+  id              String    @id @default(cuid()) @map("id")
+  detectedAt      DateTime  @map("detected_at")
+  affectedCount   Int       @map("affected_count")
+  riskLevel       String    @map("risk_level")
+  description     String    @map("description")
+  ndpcNotifiedAt  DateTime? @map("ndpc_notified_at")
+  resolvedAt      DateTime? @map("resolved_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  @@index([detectedAt])
+  @@map("breach_incident")
+}
+
+// ---------------------------------------------------------------------------
+// Notification
+// ---------------------------------------------------------------------------
+// Channel-agnostic log. Every sent notification lands here regardless of
+// channel. lib/notifications/ is the only code that writes to this table.
+// payload holds template variables. failedAt + failureReason support retry
+// logic without a separate table.
+// ---------------------------------------------------------------------------
+model Notification {
+  id              String    @id @default(cuid()) @map("id")
+  userId          String?   @map("user_id")
+  channel         String    @map("channel")
+  template        String    @map("template")
+  payload         Json?     @map("payload")
+  sentAt          DateTime? @map("sent_at")
+  failedAt        DateTime? @map("failed_at")
+  failureReason   String?   @map("failure_reason")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  user            User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([channel, sentAt])
+  @@map("notification")
+}
+
+// ---------------------------------------------------------------------------
+// CommunityLink  (BR-011, BR-012, AGENTS.md §3)
+// ---------------------------------------------------------------------------
+// Community links are DATA, not code. Never hardcode a WhatsApp or Telegram
+// URL. accessLevel is "general" (all tiers including O'Free) or
+// "ehems_open_sales" (Advanced IV+).
+// tierName is nullable: null means the link applies to all tiers.
+// ---------------------------------------------------------------------------
+model CommunityLink {
+  id          String   @id @default(cuid()) @map("id")
+  name        String   @map("name")
+  url         String   @map("url")
+  accessLevel String   @map("access_level")
+  tierName    String?  @map("tier_name")
+  active      Boolean  @default(true) @map("active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([accessLevel, active])
+  @@map("community_link")
+}
+
+// ---------------------------------------------------------------------------
+// Product
+// ---------------------------------------------------------------------------
+// Physical and digital products. productType uses a String; lib/validation/
+// enforces the enum values (D-10 build-around — read from enum, not count).
+// priceKobo: Int. Top tier ₦1,250,000 = 125,000,000 kobo; Int32 tops at
+// 2,147,483,647 so even a ₦21M product fits. (See Phase 2A plan note.)
+// ---------------------------------------------------------------------------
+model Product {
+  id          String   @id @default(cuid()) @map("id")
+  name        String   @map("name")
+  description String?  @map("description")
+  productType String   @map("product_type")
+  priceKobo   Int      @map("price_kobo")
+  currency    String   @default("NGN") @map("currency")
+  active      Boolean  @default(true) @map("active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  orders      Order[]
+
+  @@index([active])
+  @@map("product")
+}
+
+// ---------------------------------------------------------------------------
+// Order
+// ---------------------------------------------------------------------------
+// Records a member's product purchase intent. status: "pending" | "confirmed"
+// | "cancelled". Related to Product via OrderItem join.
+// ---------------------------------------------------------------------------
+model Order {
+  id         String      @id @default(cuid()) @map("id")
+  userId     String      @map("user_id")
+  productId  String      @map("product_id")
+  totalKobo  Int         @map("total_kobo")
+  currency   String      @default("NGN") @map("currency")
+  status     String      @default("pending") @map("status")
+  createdAt  DateTime    @default(now()) @map("created_at")
+  updatedAt  DateTime    @updatedAt @map("updated_at")
+
+  product    Product     @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@index([userId])
+  @@index([productId])
+  @@map("order")
+}
+
+// ---------------------------------------------------------------------------
+// FeedbackForm + FeedbackResponse
+// ---------------------------------------------------------------------------
+// Admins create forms; members submit responses. Feedback analytics is Phase
+// 2 (AGENTS.md §9 out-of-scope fence); this is the storage layer only.
+// ---------------------------------------------------------------------------
+model FeedbackForm {
+  id          String             @id @default(cuid()) @map("id")
+  title       String             @map("title")
+  description String?            @map("description")
+  active      Boolean            @default(true) @map("active")
+  createdAt   DateTime           @default(now()) @map("created_at")
+  updatedAt   DateTime           @updatedAt @map("updated_at")
+
+  responses   FeedbackResponse[]
+
+  @@map("feedback_form")
+}
+
+model FeedbackResponse {
+  id          String       @id @default(cuid()) @map("id")
+  formId      String       @map("form_id")
+  userId      String?      @map("user_id")
+  responseData Json        @map("response_data")
+  submittedAt DateTime     @default(now()) @map("submitted_at")
+
+  form        FeedbackForm @relation(fields: [formId], references: [id], onDelete: Cascade)
+
+  @@index([formId])
+  @@index([userId])
+  @@map("feedback_response")
+}
+
+// ---------------------------------------------------------------------------
+// SystemSetting
+// ---------------------------------------------------------------------------
+// Key/value config. Admins can change settings without a code deploy.
+// ---------------------------------------------------------------------------
+model SystemSetting {
+  key        String   @id @map("key")
+  value      String   @map("value")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@map("system_setting")
+}
+
+// ---------------------------------------------------------------------------
+// RetentionPolicy  (SEC-016)
+// ---------------------------------------------------------------------------
+// Per data-category retention. expiryDays is anchored to a fixed duration
+// from the record's creation, never from last activity — otherwise an erasure
+// request can be indefinitely defeated.
+// ---------------------------------------------------------------------------
+model RetentionPolicy {
+  id          String   @id @default(cuid()) @map("id")
+  category    String   @unique @map("category")
+  expiryDays  Int      @map("expiry_days")
+  description String?  @map("description")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("retention_policy")
+}
+
+// ---------------------------------------------------------------------------
+// Programme + ProgrammeSession
+// ---------------------------------------------------------------------------
+// The uncontroversial parts of the programme model. The tier relationship
+// (ProgrammeTier many-to-many) and Enrolment.programme_id are blocked on D-4
+// and land in Phase 2B.
+//
+// attendanceThreshold defaults to 60 (BR-008) and is snapshotted onto each
+// enrolment at activation so a later CMS edit cannot retroactively change
+// whether someone qualified (Phase 10 note in implementation-plan.md).
+// ---------------------------------------------------------------------------
+model Programme {
+  id                  String             @id @default(cuid()) @map("id")
+  name                String             @map("name")
+  description         String?            @map("description")
+  attendanceThreshold Int                @default(60) @map("attendance_threshold")
+  active              Boolean            @default(true) @map("active")
+  createdAt           DateTime           @default(now()) @map("created_at")
+  updatedAt           DateTime           @updatedAt @map("updated_at")
+
+  sessions            ProgrammeSession[]
+
+  @@map("programme")
+}
+
+model ProgrammeSession {
+  id          String    @id @default(cuid()) @map("id")
+  programmeId String    @map("programme_id")
+  title       String    @map("title")
+  description String?   @map("description")
+  startsAt    DateTime  @map("starts_at")
+  endsAt      DateTime? @map("ends_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  programme   Programme @relation(fields: [programmeId], references: [id], onDelete: Cascade)
+
+  @@index([programmeId])
+  @@index([startsAt])
+  @@map("programme_session")
+}

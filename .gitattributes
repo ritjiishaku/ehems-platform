@@ -1,0 +1,8 @@
+# The generated stylesheet is compared byte for byte by `npm run check:tokens`.
+# Without this, a CRLF checkout makes every check report a false "out of date".
+* text=auto eol=lf
+
+*.css text eol=lf
+*.json text eol=lf
+*.js text eol=lf
+*.md text eol=lf

@@ -1,0 +1,49 @@
+{
+  "name": "ehems-platform",
+  "version": "0.1.0",
+  "private": true,
+  "description": "EHEMS platform - design token pipeline and Next.js app",
+  "scripts": {
+    "build:tokens": "node scripts/build-tokens.js",
+    "check:tokens": "node scripts/build-tokens.js --check",
+    "test:tokens": "node --test test/*.test.js",
+    "test:app": "vitest run",
+    "test": "npm run test:tokens && npm run test:app",
+    "test:e2e": "playwright test",
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint",
+    "format": "prettier --write app components lib styles test",
+    "format:check": "prettier --check app components lib styles test",
+    "verify": "npm run check:tokens && npm run typecheck && npm run lint && npm run format:check && npm run test"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "next": "16.3.6",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
+    "@playwright/test": "^1",
+    "@tailwindcss/postcss": "^4",
+    "@testing-library/jest-dom": "^6",
+    "@testing-library/react": "^16",
+    "@types/node": "^24",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^5",
+    "eslint": "^9",
+    "eslint-config-next": "16.3.6",
+    "jsdom": "^28",
+    "prettier": "^3",
+    "tailwindcss": "^4",
+    "typescript": "^5",
+    "vitest": "^5",
+    "vitest-axe": "^0.1.0"
+  }
+}

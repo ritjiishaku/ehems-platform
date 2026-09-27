@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 550" width="1080" height="550">
+  <!-- EHEMS Logo — Vector Recreation -->
+  <!-- Navy: #0A1F44 | Gold: #F5B301 -->
+  <!-- Transparent background -->
+
+  <!-- ==================== ICON ==================== -->
+  <g id="ehems-icon">
+
+    <!-- Gold outer crescent (left swoosh) -->
+    <path d="M 190 40
+             C 95 65, 40 155, 45 255
+             C 50 355, 110 430, 200 445
+             C 130 405, 85 330, 85 240
+             C 85 150, 135 75, 190 40 Z"
+          fill="#F5B301"/>
+
+    <!-- Gold sphere -->
+    <circle cx="160" cy="245" r="95" fill="#F5B301"/>
+
+    <!-- Navy figure — body (S-curve) -->
+    <path d="M 210 145
+             C 165 170, 150 220, 165 265
+             C 180 310, 220 340, 240 390
+             C 248 410, 250 430, 248 450
+             L 300 450
+             C 302 425, 296 400, 280 375
+             C 255 335, 225 305, 220 265
+             C 215 230, 225 195, 245 170
+             Z"
+          fill="#0A1F44"/>
+
+    <!-- Navy figure — raised arm reaching toward star -->
+    <path d="M 225 175
+             C 245 140, 265 115, 290 98
+             L 305 118
+             C 280 135, 260 160, 245 195
+             Z"
+          fill="#0A1F44"/>
+
+    <!-- Navy head -->
+    <circle cx="208" cy="108" r="34" fill="#0A1F44"/>
+
+    <!-- Navy ascending bars (growth indicator) -->
+    <rect x="225" y="340" width="30" height="110" fill="#0A1F44"/>
+    <rect x="270" y="300" width="30" height="150" fill="#0A1F44"/>
+    <rect x="315" y="260" width="30" height="190" fill="#0A1F44"/>
+
+    <!-- Gold star -->
+    <path d="M 290 50 L 299 76 L 326 76 L 304 93 L 312 119
+             L 290 103 L 268 119 L 276 93 L 254 76 L 281 76 Z"
+          fill="#F5B301"/>
+
+  </g>
+
+  <!-- ==================== DIVIDER ==================== -->
+  <line x1="390" y1="100" x2="390" y2="440"
+        stroke="#0A1F44" stroke-width="5"/>
+
+  <!-- ==================== WORDMARK ==================== -->
+  <g font-family="Montserrat, 'Helvetica Neue', Arial, sans-serif"
+     fill="#0A1F44">
+
+    <!-- EHEMS -->
+    <text x="425" y="200"
+          font-size="135" font-weight="900" letter-spacing="3">EHEMS</text>
+
+    <!-- Descriptor (3 lines) -->
+    <text x="428" y="258"
+          font-size="46" font-weight="700" letter-spacing="1">EMERGING HEALTHCARE</text>
+    <text x="428" y="312"
+          font-size="46" font-weight="700" letter-spacing="1">ENTREPRENEURS</text>
+    <text x="428" y="366"
+          font-size="46" font-weight="700" letter-spacing="1">MEETING SPACE</text>
+
+  </g>
+
+  <!-- ==================== GOLD RULE ==================== -->
+  <line x1="90" y1="425" x2="1045" y2="425"
+        stroke="#F5B301" stroke-width="5"/>
+
+  <!-- ==================== TAGLINE ==================== -->
+  <text x="95" y="495"
+        font-family="Montserrat, 'Helvetica Neue', Arial, sans-serif"
+        font-size="50" font-weight="600" fill="#0A1F44" letter-spacing="0.5">
+    Connect. Collaborate. Create Impact.
+  </text>
+
+</svg>

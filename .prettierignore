@@ -1,0 +1,24 @@
+# Generated artifacts must never be reformatted.
+#
+# styles/tokens.css is emitted by scripts/build-tokens.js and compared
+# byte-for-byte by `npm run check:tokens`. If Prettier rewrites it, the staleness
+# gate fails on the next run and `npm run verify` can never pass. Format the
+# source (tokens.json) and let the generator own its own output formatting.
+styles/tokens.css
+
+# Build output and dependencies.
+.next/
+out/
+build/
+node_modules/
+
+# Lockfiles are machine-generated and enormous.
+package-lock.json
+
+# Fonts and images are binary.
+*.woff2
+*.ico
+*.jpg
+*.jpeg
+*.png
+*.webp

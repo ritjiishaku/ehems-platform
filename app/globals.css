@@ -1,0 +1,272 @@
+@import 'tailwindcss';
+@import '../styles/tokens.css';
+@import '../styles/type.css';
+
+/* ------------------------------------------------------------------ fonts */
+
+/* next/font/local injects this via the layout, which inlines the @font-face and
+   preloads the file. The generated tokens.css names Montserrat but deliberately
+   emits no @font-face - a nested @import is invalid CSS, and loading the family
+   from this file would block first paint. */
+@theme inline {
+  --font-sans: var(--font-montserrat), ui-sans-serif, system-ui, sans-serif;
+}
+
+/* ------------------------------------------------------------- letter spacing */
+
+/* The `--letter-spacing-*` scale from tokens.json is emitted but nothing in
+   Tailwind reads it: `tracking-*` resolves against Tailwind's own `--tracking-*`
+   namespace. The stock values happen to coincide with the tokens today, so an
+   eyebrow set with `tracking-widest` looks correct by luck rather than by
+   contract. Mapping the namespace means the labels on the landing page are
+   driven by tokens.json like every other scale. */
+@theme inline {
+  --tracking-tighter: var(--letter-spacing-tighter);
+  --tracking-tight: var(--letter-spacing-tight);
+  --tracking-normal: var(--letter-spacing-normal);
+  --tracking-wide: var(--letter-spacing-wide);
+  --tracking-wider: var(--letter-spacing-wider);
+  --tracking-widest: var(--letter-spacing-widest);
+}
+
+/* ----------------------------------------------------------------- colour */
+
+/* `inline` rather than a plain @theme: Tailwind v4 substitutes the var()
+   reference into the utility, so `bg-primary` emits
+   `background-color: var(--color-primary)` and the dark scopes in
+   styles/tokens.css keep working. A non-inline @theme would resolve the value
+   at build time and bake the light colour into every dark-mode class. */
+@theme inline {
+  --color-primary: var(--color-primary);
+  --color-on-primary: var(--color-on-primary);
+  --color-primary-container: var(--color-primary-container);
+  --color-on-primary-container: var(--color-on-primary-container);
+  --color-secondary: var(--color-secondary);
+  --color-on-secondary: var(--color-on-secondary);
+  --color-secondary-container: var(--color-secondary-container);
+  --color-on-secondary-container: var(--color-on-secondary-container);
+  --color-tertiary: var(--color-tertiary);
+  --color-on-tertiary: var(--color-on-tertiary);
+  --color-tertiary-container: var(--color-tertiary-container);
+  --color-on-tertiary-container: var(--color-on-tertiary-container);
+  --color-error: var(--color-error);
+  --color-on-error: var(--color-on-error);
+  --color-error-container: var(--color-error-container);
+  --color-on-error-container: var(--color-on-error-container);
+  --color-background: var(--color-background);
+  --color-on-background: var(--color-on-background);
+  --color-surface: var(--color-surface);
+  --color-on-surface: var(--color-on-surface);
+  --color-surface-dim: var(--color-surface-dim);
+  --color-surface-bright: var(--color-surface-bright);
+  --color-surface-variant: var(--color-surface-variant);
+  --color-on-surface-variant: var(--color-on-surface-variant);
+  --color-outline: var(--color-outline);
+  --color-outline-variant: var(--color-outline-variant);
+  --color-inverse-surface: var(--color-inverse-surface);
+  --color-inverse-on-surface: var(--color-inverse-on-surface);
+  --color-inverse-primary: var(--color-inverse-primary);
+  --color-surface-container-lowest: var(--color-surface-container-lowest);
+  --color-surface-container-low: var(--color-surface-container-low);
+  --color-surface-container: var(--color-surface-container);
+  --color-surface-container-high: var(--color-surface-container-high);
+  --color-surface-container-highest: var(--color-surface-container-highest);
+}
+
+/* ---------------------------------------------------------------- spacing */
+
+/* The 2px scale from tokens.json, declared step by step rather than left to
+   Tailwind's `calc(var(--spacing) * n)` multiplier. Every token step except
+   `spacing-0-5` (0.125rem) and `spacing-px` happens to be an integer multiple of
+   Tailwind's 0.25rem base, so the multiplier would be *nearly* right - which is
+   worse than wrong, because the two half-steps would silently fall back to
+   something else. Declaring the scale outright makes it exact, and makes
+   `p-0-5` reachable without an arbitrary value. */
+@theme inline {
+  --spacing-0: 0;
+  --spacing-px: 1px;
+  --spacing-0-5: 0.125rem;
+  --spacing-1: 0.25rem;
+  --spacing-1-5: 0.375rem;
+  --spacing-2: 0.5rem;
+  --spacing-2-5: 0.625rem;
+  --spacing-3: 0.75rem;
+  --spacing-3-5: 0.875rem;
+  --spacing-4: 1rem;
+  --spacing-5: 1.25rem;
+  --spacing-6: 1.5rem;
+  --spacing-7: 1.75rem;
+  --spacing-8: 2rem;
+  --spacing-9: 2.25rem;
+  --spacing-10: 2.5rem;
+  --spacing-11: 2.75rem;
+  --spacing-12: 3rem;
+  --spacing-14: 3.5rem;
+  --spacing-16: 4rem;
+  --spacing-20: 5rem;
+  --spacing-24: 6rem;
+  --spacing-28: 7rem;
+  --spacing-32: 8rem;
+  --spacing-36: 9rem;
+  --spacing-40: 10rem;
+  --spacing-44: 11rem;
+  --spacing-48: 12rem;
+  --spacing-52: 13rem;
+  --spacing-56: 14rem;
+  --spacing-60: 15rem;
+  --spacing-64: 16rem;
+  --spacing-72: 18rem;
+  --spacing-80: 20rem;
+  --spacing-96: 24rem;
+}
+
+/* ----------------------------------------------------------------- radius */
+
+@theme inline {
+  --radius-none: var(--radius-none);
+  --radius-xs: var(--radius-xs);
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-xl: var(--radius-xl);
+  --radius-2xl: var(--radius-2xl);
+  --radius-3xl: var(--radius-3xl);
+  --radius-full: var(--radius-full);
+}
+
+/* ------------------------------------------------------------------ shadow */
+
+@theme inline {
+  --shadow-xs: var(--shadow-xs);
+  --shadow-sm: var(--shadow-sm);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
+  --shadow-xl: var(--shadow-xl);
+  --shadow-2xl: var(--shadow-2xl);
+  --shadow-inner: var(--shadow-inner);
+  --shadow-glow-primary: var(--shadow-glow-primary);
+  --shadow-glow-secondary: var(--shadow-glow-secondary);
+  --shadow-glow-tertiary: var(--shadow-glow-tertiary);
+  --shadow-glow-error: var(--shadow-glow-error);
+}
+
+/**
+ * Elevation and a coloured glow, layered in a single `box-shadow`.
+ *
+ * These exist because Tailwind cannot stack two shadow utilities. Every
+ * `shadow-*` class assigns `--tw-shadow`, so `shadow-xl shadow-glow-secondary`
+ * in one class attribute is two declarations of the same property and the
+ * winner is decided by stylesheet order rather than by the order written. Writing
+ * the pair out by hand keeps one declaration owning the property.
+ *
+ * ## Why this restores depth where a gradient mesh cannot
+ *
+ * A card's `box-shadow` is never part of the background stack axe-core builds
+ * for the `color-contrast` rule, so a coloured glow is invisible to that check -
+ * it is the one kind of colour on this page that costs nothing to verify. The
+ * `shadow-glow-secondary` and `shadow-glow-tertiary` tokens were audited and
+ * then had no consumer; these two utilities are what puts the amber and plum
+ * back on the page without reintroducing anything unverifiable.
+ *
+ * `shadow-lg` rather than `shadow-xl` on the tertiary pair keeps the smaller
+ * cards visually subordinate to the brand plate they sit under.
+ */
+@utility shadow-elevate-secondary {
+  box-shadow: var(--shadow-xl), var(--shadow-glow-secondary);
+}
+
+@utility shadow-elevate-tertiary {
+  box-shadow: var(--shadow-lg), var(--shadow-glow-tertiary);
+}
+
+/* ------------------------------------------------------ decorative accents */
+
+/**
+ * A tricolour rule for the top edge of a band.
+ *
+ * ## Why there is no gradient-mesh utility in this file
+ *
+ * There was one, and it is gone because axe cannot decide contrast under it.
+ * That is a statement about `axe-core`'s implementation, not a general truth
+ * about gradients, so the mechanism is worth recording precisely:
+ *
+ * - The `color-contrast` rule builds its background from a geometric hit-test -
+ *   `document.elementsFromPoint` (`axe-core/axe.js:18082`) - not from paint
+ *   order.
+ * - `reduceToElementsBelowFloating` (`axe.js:18587`) discards elements behind a
+ *   `fixed` or `sticky` ancestor and nothing else. An absolutely positioned orb
+ *   at `z-index: -10` is *not* discarded, so it stays in the stack even though it
+ *   is painted behind the text.
+ * - A `background-image` gradient then resolves to the `bgGradient` incomplete
+ *   reason (`axe.js:18177`); an element whose edge crosses a run of text gives
+ *   different stacks per sample point, which is `elmPartiallyObscuring`
+ *   (`axe.js:24828`); anything at all above the text is `bgOverlap` (`axe.js:24824`).
+ * - `test/e2e/landing-page.spec.ts:93-94` fails the run on any
+ *   `color-contrast` in `incomplete`, because an undecided result is not evidence
+ *   of anything. A solid `background-color` underneath does not help - axe still
+ *   defers to the image.
+ *
+ * A solid-colour orb is not a way out either. axe composites its alpha and
+ * compares against the *declared* colour, blind to `blur()`, so the check would
+ * pass or fail on a colour that is not the one on screen. That is worse than
+ * declining to answer.
+ *
+ * The design rule that follows: **no gradient may sit behind text on this page.**
+ * The 102-pair audit in `scripts/build-tokens.js` and the Chromium run are the
+ * only reason a colour is safe to put under a sentence, and a gradient removes
+ * both. `data-decorative` marks the regions where decoration is allowed, and
+ * `test/e2e/landing-page.spec.ts` enforces that they stay clear of text at 320px,
+ * 375px, and desktop.
+ *
+ * Depth therefore comes from things that are not behind the text: the
+ * `shadow-elevate-*` utilities above for tinted elevation, `shadow-2xl` for
+ * physical depth, hairline `border-outline-variant` edges, the `inverse-surface`
+ * band for tonal contrast, and the display type roles for hierarchy.
+ */
+@utility accent-rule {
+  background-image: linear-gradient(
+    90deg,
+    var(--color-primary) 0%,
+    var(--color-secondary) 52%,
+    var(--color-tertiary) 100%
+  );
+}
+
+/* -------------------------------------------------------------- dark mode */
+
+/* Phase 1 ships light only, pinned by data-theme="light" in the root layout
+   (see .agents/rules/design-system.md §Dark mode). This variant is declared
+   anyway so that enabling dark is a one-attribute change rather than a
+   re-derivation of how the three scopes in styles/tokens.css cascade.
+   Nothing uses it yet. */
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
+/* ------------------------------------------------------------------- base */
+
+@layer base {
+  html {
+    /* In-page anchors glide instead of jump. Respects the reduced-motion guard
+       below, so a user who asks for no motion still gets an instant jump. */
+    scroll-behavior: smooth;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-on-background);
+    font-family: var(--font-montserrat), ui-sans-serif, system-ui, sans-serif;
+  }
+
+  /* Focus must never be removed without a replacement
+     (.agents/rules/design-system.md §Accessibility). The ring is drawn from the
+     outline role so it stays visible on every surface. */
+  :focus-visible {
+    outline: 2px solid var(--color-outline);
+    outline-offset: 2px;
+  }
+}

@@ -1,0 +1,138 @@
+/* ============================================================
+   EHEMS - Material Design 3 type roles
+   ============================================================
+
+   styles/tokens.css is generated from tokens.json and is never hand-edited.
+   This file is the other half of that contract: it binds each of the 15 MD3
+   type roles to a single class so a role cannot be spelled with one role's size
+   and another role's leading. There is deliberately no way to write
+   `text-title-medium leading-body-large` - that combination does not exist in
+   Material 3, and allowing it is how type systems drift.
+
+   Why not a `font:` shorthand? build-tokens.js resolves only whole-string
+   `{reference}` values, so a composite would ship unresolved braces into the
+   browser. Emitting the four parts and joining them here keeps the token build
+   untouched and the audit intact.
+
+   The roles below are the sanctioned way to set type. The `text-*` scale in
+   tokens.json is retained for layout and utility work, but anything a member
+   reads should use a role - see .agents/rules/design-system.md.
+   ============================================================ */
+
+@utility display-large {
+  font-size: var(--type-size-display-large);
+  line-height: var(--type-line-height-display-large);
+  font-weight: var(--type-weight-regular-role);
+  letter-spacing: var(--type-tracking-display-large);
+}
+
+@utility display-medium {
+  font-size: var(--type-size-display-medium);
+  line-height: var(--type-line-height-display-medium);
+  font-weight: var(--type-weight-regular-role);
+  letter-spacing: var(--type-tracking-display-medium);
+}
+
+@utility display-small {
+  font-size: var(--type-size-display-small);
+  line-height: var(--type-line-height-display-small);
+  font-weight: var(--type-weight-regular-role);
+  letter-spacing: var(--type-tracking-display-small);
+}
+
+@utility headline-large {
+  font-size: var(--type-size-headline-large);
+  line-height: var(--type-line-height-headline-large);
+  font-weight: var(--type-weight-regular-role);
+  letter-spacing: var(--type-tracking-headline-large);
+}
+
+@utility headline-medium {
+  font-size: var(--type-size-headline-medium);
+  line-height: var(--type-line-height-headline-medium);
+  font-weight: var(--type-weight-regular-role);
+  letter-spacing: var(--type-tracking-headline-medium);
+}
+
+@utility headline-small {
+  font-size: var(--type-size-headline-small);
+  line-height: var(--type-line-height-headline-small);
+  font-weight: var(--type-weight-regular-role);
+  letter-spacing: var(--type-tracking-headline-small);
+}
+
+@utility title-large {
+  font-size: var(--type-size-title-large);
+  line-height: var(--type-line-height-title-large);
+  font-weight: var(--type-weight-regular-role);
+  letter-spacing: var(--type-tracking-title-large);
+}
+
+@utility title-medium {
+  font-size: var(--type-size-title-medium);
+  line-height: var(--type-line-height-title-medium);
+  font-weight: var(--type-weight-medium-role);
+  letter-spacing: var(--type-tracking-title-medium);
+}
+
+@utility title-small {
+  font-size: var(--type-size-title-small);
+  line-height: var(--type-line-height-title-small);
+  font-weight: var(--type-weight-medium-role);
+  letter-spacing: var(--type-tracking-title-small);
+}
+
+@utility body-large {
+  font-size: var(--type-size-body-large);
+  line-height: var(--type-line-height-body-large);
+  font-weight: var(--type-weight-regular-role);
+  letter-spacing: var(--type-tracking-body-large);
+}
+
+@utility body-medium {
+  font-size: var(--type-size-body-medium);
+  line-height: var(--type-line-height-body-medium);
+  font-weight: var(--type-weight-regular-role);
+  letter-spacing: var(--type-tracking-body-medium);
+}
+
+@utility body-small {
+  font-size: var(--type-size-body-small);
+  line-height: var(--type-line-height-body-small);
+  font-weight: var(--type-weight-regular-role);
+  letter-spacing: var(--type-tracking-body-small);
+}
+
+@utility label-large {
+  font-size: var(--type-size-label-large);
+  line-height: var(--type-line-height-label-large);
+  font-weight: var(--type-weight-medium-role);
+  letter-spacing: var(--type-tracking-label-large);
+}
+
+@utility label-medium {
+  font-size: var(--type-size-label-medium);
+  line-height: var(--type-line-height-label-medium);
+  font-weight: var(--type-weight-medium-role);
+  letter-spacing: var(--type-tracking-label-medium);
+}
+
+@utility label-small {
+  font-size: var(--type-size-label-small);
+  line-height: var(--type-line-height-label-small);
+  font-weight: var(--type-weight-medium-role);
+  letter-spacing: var(--type-tracking-label-small);
+}
+
+/* Reduced motion is enforced by driving the durations to zero rather than by
+   each component checking the media query. A component that forgets the check
+   then still respects the preference, which is the failure mode worth
+   designing out. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-duration-instant: 0ms;
+    --motion-duration-fast: 0ms;
+    --motion-duration-medium: 0ms;
+    --motion-duration-slow: 0ms;
+  }
+}

@@ -1,0 +1,20 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="amberGlow" x1="90" y1="70" x2="420" y2="420" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F6C853"/>
+      <stop offset="1" stop-color="#D89B16"/>
+    </linearGradient>
+  </defs>
+
+  <g>
+    <path d="M125 128H290" stroke="white" stroke-width="32" stroke-linecap="round"/>
+    <path d="M125 214H290" stroke="white" stroke-width="32" stroke-linecap="round"/>
+    <path d="M125 300H236" stroke="white" stroke-width="32" stroke-linecap="round"/>
+    <path d="M125 128V300" stroke="white" stroke-width="32" stroke-linecap="round"/>
+    <circle cx="338" cy="142" r="62" fill="url(#amberGlow)"/>
+    <path d="M338 100V184" stroke="white" stroke-width="20" stroke-linecap="round"/>
+    <path d="M302 142H374" stroke="white" stroke-width="20" stroke-linecap="round"/>
+    <path d="M215 354L310 268L372 324" stroke="url(#amberGlow)" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M324 330L372 324L366 272" stroke="url(#amberGlow)" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>

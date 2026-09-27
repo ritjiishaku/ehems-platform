@@ -1,0 +1,25 @@
+node_modules/
+.next/
+out/
+dist/
+build/
+coverage/
+
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+
+.env
+.env.*
+!.env.example
+
+# playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts

@@ -89,10 +89,19 @@ export function HowToJoin() {
         })}
       </ol>
 
-      <p className="body-large text-on-surface-variant border-outline-variant mt-2 max-w-prose border-t pt-8">
-        Not sure which tier fits yet? The programme guide explains what each one includes, how
-        payment and verification work, and what to expect at every stage.
-      </p>
+      <div className="border-outline-variant mt-2 max-w-prose border-t pt-8">
+        <p className="body-large text-on-surface-variant">
+          Not sure which tier fits yet? The{' '}
+          <Link href="/programmes" className="text-primary font-medium hover:underline">
+            programme guide
+          </Link>{' '}
+          and{' '}
+          <Link href="/faq" className="text-primary font-medium hover:underline">
+            FAQ
+          </Link>{' '}
+          explain what each tier includes, how payments work, and what to expect at every stage.
+        </p>
+      </div>
     </Section>
   );
 }

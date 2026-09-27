@@ -29,19 +29,23 @@ import { Eyebrow } from '@/components/ui/eyebrow';
  */
 
 const NAV = [
-  { href: '/#programmes', label: 'What you get' },
-  { href: '/#why', label: 'Why EHEMS' },
-  { href: '/#join', label: 'How to join' },
+  { href: '/programmes', label: 'Programmes' },
+  { href: '/pricing', label: 'Pricing' },
+  { href: '/about', label: 'About' },
+  { href: '/faq', label: 'FAQ' },
+  { href: '/contact', label: 'Contact' },
   { href: '/login', label: 'Sign in' },
 ];
 
 const FOOTER_GROUPS = [
   {
-    label: 'Explore',
+    label: 'Platform',
     links: [
-      { href: '/#programmes', label: 'What you get' },
-      { href: '/#why', label: 'Why EHEMS' },
-      { href: '/#join', label: 'How to join' },
+      { href: '/programmes', label: 'Programmes' },
+      { href: '/pricing', label: 'Pricing' },
+      { href: '/about', label: 'About EHEMS' },
+      { href: '/faq', label: 'FAQ' },
+      { href: '/contact', label: 'Contact Us' },
     ],
   },
   {

@@ -9,23 +9,32 @@ export default function RegisterPage({
   const error = searchParams && 'then' in searchParams ? undefined : searchParams?.error;
 
   return (
-    <main className="bg-background min-h-screen px-6 py-16">
-      <div className="mx-auto max-w-md rounded-3xl border border-outline-variant bg-surface-container p-8 shadow-sm">
-        <p className="title-small text-on-surface-variant">Join EHEMS</p>
-        <h1 className="headline-small mt-3 text-on-surface">Create your account</h1>
-        <p className="body-medium mt-3 text-on-surface-variant">
+    <main className="bg-background flex h-screen max-h-screen w-full items-center justify-center overflow-hidden px-4 py-4 sm:px-6">
+      <div className="w-full max-w-md rounded-3xl border border-outline-variant bg-surface-container-lowest p-6 shadow-md sm:p-8">
+        <div className="flex items-center justify-between">
+          <Link
+            href="/"
+            className="text-xl font-extrabold tracking-wide text-on-surface transition-opacity hover:opacity-80"
+          >
+            EHEMS
+          </Link>
+          <span className="label-small text-on-surface-variant font-medium">Join EHEMS</span>
+        </div>
+
+        <h1 className="headline-small mt-4 font-bold text-on-surface">Create your account</h1>
+        <p className="body-medium text-on-surface-variant mt-1">
           Start free and explore the programme before you commit to a tier.
         </p>
 
         {error ? (
-          <p className="mt-4 rounded-xl border border-error bg-error-container px-3 py-2 text-label-medium text-on-error-container">
+          <p className="bg-error-container border-error text-on-error-container text-label-medium mt-3 rounded-xl border px-3 py-2">
             {error}
           </p>
         ) : null}
 
-        <form action={registerAction} className="mt-8 space-y-5">
+        <form action={registerAction} className="mt-5 space-y-3.5">
           <div>
-            <label htmlFor="fullName" className="label-medium text-on-surface">
+            <label htmlFor="fullName" className="label-medium text-on-surface block font-medium">
               Full name
             </label>
             <input
@@ -33,14 +42,14 @@ export default function RegisterPage({
               name="fullName"
               type="text"
               autoComplete="name"
-              className="mt-2 w-full rounded-xl border border-outline bg-surface-container-lowest px-4 py-3 text-on-surface outline-none focus:border-primary"
+              className="border-outline bg-surface-container-lowest text-on-surface focus:border-primary focus:ring-primary/20 mt-1 w-full rounded-xl border px-3.5 py-2.5 outline-none transition-all focus:ring-2"
               placeholder="Your full name"
               required
             />
           </div>
 
           <div>
-            <label htmlFor="email" className="label-medium text-on-surface">
+            <label htmlFor="email" className="label-medium text-on-surface block font-medium">
               Email address
             </label>
             <input
@@ -48,14 +57,14 @@ export default function RegisterPage({
               name="email"
               type="email"
               autoComplete="email"
-              className="mt-2 w-full rounded-xl border border-outline bg-surface-container-lowest px-4 py-3 text-on-surface outline-none focus:border-primary"
+              className="border-outline bg-surface-container-lowest text-on-surface focus:border-primary focus:ring-primary/20 mt-1 w-full rounded-xl border px-3.5 py-2.5 outline-none transition-all focus:ring-2"
               placeholder="you@example.com"
               required
             />
           </div>
 
           <div>
-            <label htmlFor="password" className="label-medium text-on-surface">
+            <label htmlFor="password" className="label-medium text-on-surface block font-medium">
               Password
             </label>
             <input
@@ -63,7 +72,7 @@ export default function RegisterPage({
               name="password"
               type="password"
               autoComplete="new-password"
-              className="mt-2 w-full rounded-xl border border-outline bg-surface-container-lowest px-4 py-3 text-on-surface outline-none focus:border-primary"
+              className="border-outline bg-surface-container-lowest text-on-surface focus:border-primary focus:ring-primary/20 mt-1 w-full rounded-xl border px-3.5 py-2.5 outline-none transition-all focus:ring-2"
               placeholder="Create a password"
               minLength={8}
               required
@@ -72,15 +81,18 @@ export default function RegisterPage({
 
           <button
             type="submit"
-            className="bg-primary text-on-primary w-full rounded-xl px-4 py-3 text-label-large"
+            className="bg-primary text-on-primary text-label-large hover:bg-primary/90 mt-1 w-full rounded-xl px-4 py-3 font-semibold shadow-sm transition-colors"
           >
             Create account
           </button>
         </form>
 
-        <p className="body-medium mt-6 text-center text-on-surface-variant">
+        <p className="body-medium text-on-surface-variant mt-5 text-center">
           Already have an account?{' '}
-          <Link href="/login" className="text-primary underline-offset-4 hover:underline">
+          <Link
+            href="/login"
+            className="text-primary font-semibold underline-offset-4 hover:underline"
+          >
             Log in
           </Link>
         </p>

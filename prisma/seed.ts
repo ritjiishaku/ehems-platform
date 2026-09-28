@@ -15,6 +15,7 @@
  */
 
 import { PrismaClient } from '@prisma/client';
+import { CONSENT_VERSION } from '../lib/ndpa/consent';
 
 const prisma = new PrismaClient();
 
@@ -106,8 +107,10 @@ async function main() {
   // -------------------------------------------------------------------------
   const settings = [
     {
+      // Sourced from the same constant registerUser writes into ConsentRecord, so
+      // the setting and the records it describes cannot disagree.
       key: 'consent_version',
-      value: '1.0',
+      value: CONSENT_VERSION,
     },
     {
       key: 'session_lifetime_member_days',

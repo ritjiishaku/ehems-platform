@@ -28,9 +28,11 @@
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
+    "bcryptjs": "^3.0.3",
     "next": "16.3.6",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",
@@ -38,6 +40,7 @@
     "@tailwindcss/postcss": "^4",
     "@testing-library/jest-dom": "^6",
     "@testing-library/react": "^16",
+    "@types/bcryptjs": "^2.4.6",
     "@types/node": "^24",
     "@types/react": "^19",
     "@types/react-dom": "^19",

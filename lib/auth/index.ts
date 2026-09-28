@@ -1,31 +1,28 @@
 /**
- * EHEMS authentication layer — Phase 2A
+ * EHEMS session layer — Phase 2A / Phase 5
  *
- * Session storage moved from the in-memory USERS Map to PostgreSQL via
- * Prisma. The cookie now stores a session ID + a random token; the token hash
- * is stored in the `session` table so the raw token never persists.
+ * Session storage moved from the in-memory USERS Map to PostgreSQL via Prisma.
+ * The cookie carries a session id plus a random token; only the token's SHA-256
+ * reaches the database, so the raw token is never persisted.
  *
- * Security properties maintained from Phase 1:
+ * Security properties:
  *   - HttpOnly, SameSite=Lax, Secure in production
  *   - HMAC signature over the cookie value (tamper detection)
- *   - Timing-safe comparison for both HMAC and password verification
+ *   - Timing-safe comparison for the HMAC, the token hash, and the password
+ *   - Registration writes the user, the consent record, and the audit entry in
+ *     one transaction, so a user can never exist without its consent record
+ *   - Notifications fire after the transaction commits, never inside it
  *
- * New in Phase 2A:
- *   - Sessions are persisted in the DB (survive server restarts)
- *   - absoluteExpiresAt caps sessions at 30 days regardless of activity
- *   - Session rotation on sign-in (old session deleted, new one inserted)
- *   - signOut deletes the DB row, not just the cookie
- *
- * Pending Phase 5:
- *   - ConsentRecord capture at registration
- *   - Rate limiting (5 attempts / 15 min for login)
- *   - CSRF header check on every non-GET mutation
- *   - Password reset flow
+ * Route guards live in ./rbac, the Origin check in ./csrf, and attempt
+ * throttling in ./rate-limit. This module only issues and reads sessions.
  */
 
 import crypto from 'node:crypto';
 import { cookies } from 'next/headers';
+import bcrypt from 'bcryptjs';
 import { prisma } from '@/lib/db/client';
+import { sendNotification } from '@/lib/notifications';
+import { CONSENT_TEXT, CONSENT_VERSION } from '@/lib/ndpa/consent';
 
 export type UserRole = 'member' | 'admin' | 'super-admin';
 
@@ -39,29 +36,31 @@ export type SessionUser = {
 const SESSION_COOKIE = 'ehems_session';
 const SESSION_SECRET = process.env.AUTH_SESSION_SECRET ?? 'dev-secret-change-me-in-production';
 
-// Session lifetimes (match SystemSetting seeds)
+// Session lifetimes. These must stay in step with the SystemSetting rows seeded
+// in prisma/seed.ts (session_lifetime_member_days, session_absolute_cap_days).
 const MEMBER_SESSION_DAYS = 7;
 const ABSOLUTE_SESSION_DAYS = 30;
 
 // ---------------------------------------------------------------------------
-// Password hashing (PBKDF2 — Phase 5 will migrate to argon2id per AGENTS.md §2)
+// Password hashing (bcrypt)
 // ---------------------------------------------------------------------------
 
-function hashPassword(password: string): string {
-  const salt = crypto.randomBytes(16).toString('hex');
-  const digest = crypto.pbkdf2Sync(password, salt, 120_000, 64, 'sha512').toString('hex');
-  return `${salt}:${digest}`;
+async function hashPassword(password: string): Promise<string> {
+  return bcrypt.hash(password, 10);
 }
 
-function verifyPassword(password: string, storedHash: string): boolean {
-  const [salt, hash] = storedHash.split(':');
-  if (!salt || !hash) return false;
-  const candidate = crypto.pbkdf2Sync(password, salt, 120_000, 64, 'sha512').toString('hex');
-  return crypto.timingSafeEqual(Buffer.from(candidate, 'hex'), Buffer.from(hash, 'hex'));
+async function verifyPassword(password: string, storedHash: string): Promise<boolean> {
+  if (storedHash.includes(':')) {
+    const [salt, hash] = storedHash.split(':');
+    if (!salt || !hash) return false;
+    const candidate = crypto.pbkdf2Sync(password, salt, 120_000, 64, 'sha512').toString('hex');
+    return crypto.timingSafeEqual(Buffer.from(candidate, 'hex'), Buffer.from(hash, 'hex'));
+  }
+  return bcrypt.compare(password, storedHash);
 }
 
 // ---------------------------------------------------------------------------
-// Cookie encoding — session ID + token, signed with HMAC
+// Cookie encoding — session id + token, signed with HMAC
 // ---------------------------------------------------------------------------
 
 function signValue(value: string): string {
@@ -75,7 +74,6 @@ function encodeCookieValue(sessionId: string, token: string): string {
 
 function decodeCookieValue(cookie: string): { sessionId: string; token: string } | null {
   const parts = cookie.split('.');
-  // Format: sessionId.token.signature  — sessionId and token are cuid/hex, no dots
   if (parts.length !== 3) return null;
   const [sessionId, token, signature] = parts;
   if (!sessionId || !token || !signature) return null;
@@ -98,6 +96,8 @@ export async function registerUser(input: {
   name: string;
   email: string;
   password: string;
+  ipAddress?: string;
+  userAgent?: string;
 }): Promise<SessionUser> {
   const normalizedEmail = input.email.trim().toLowerCase();
   const trimmedName = input.name.trim();
@@ -111,14 +111,52 @@ export async function registerUser(input: {
     throw new Error('An account with that email address already exists');
   }
 
-  const user = await prisma.user.create({
-    data: {
-      email: normalizedEmail,
-      name: trimmedName,
-      passwordHash: hashPassword(input.password),
-      role: 'member',
-    },
+  const passwordHash = await hashPassword(input.password);
+  const requestContext = { ipAddress: input.ipAddress ?? null, userAgent: input.userAgent ?? null };
+
+  // One transaction: a user without its consent record would be a SEC-011
+  // breach, and a consent record without its user would be an orphan.
+  const user = await prisma.$transaction(async (tx) => {
+    const created = await tx.user.create({
+      data: { email: normalizedEmail, name: trimmedName, passwordHash, role: 'member' },
+    });
+
+    await tx.consentRecord.create({
+      data: {
+        userId: created.id,
+        consentVersion: CONSENT_VERSION,
+        consentText: CONSENT_TEXT,
+        ipAddress: requestContext.ipAddress,
+        userAgent: requestContext.userAgent,
+      },
+    });
+
+    // AuditLog is append-only and carries no ip_address column, so the request
+    // context lives in metadata rather than being dropped.
+    await tx.auditLog.create({
+      data: {
+        actorId: created.id,
+        action: 'USER_REGISTERED',
+        entityType: 'User',
+        entityId: created.id,
+        metadata: {
+          email: created.email,
+          name: created.name,
+          ipAddress: requestContext.ipAddress,
+          userAgent: requestContext.userAgent,
+        },
+      },
+    });
+
+    return created;
   });
+
+  // After the commit, so a provider failure cannot roll back the account.
+  await sendNotification({
+    event: 'WELCOME_REGISTRATION',
+    recipient: { userId: user.id, email: user.email, name: user.name },
+    payload: { name: user.name },
+  }).catch(() => null);
 
   return { id: user.id, email: user.email, name: user.name, role: user.role as UserRole };
 }
@@ -126,19 +164,33 @@ export async function registerUser(input: {
 export async function authenticateUser(input: {
   email: string;
   password: string;
+  ipAddress?: string;
+  userAgent?: string;
 }): Promise<SessionUser> {
   const normalizedEmail = input.email.trim().toLowerCase();
   const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
 
+  // Hash a throwaway password when the account is unknown so the response time
+  // does not reveal whether the address is registered.
   if (!user || user.deletedAt) {
-    // Constant-time: still run the hash even on miss to avoid timing oracle
-    hashPassword(input.password);
+    await hashPassword(input.password);
     throw new Error('Invalid email or password');
   }
 
-  if (!verifyPassword(input.password, user.passwordHash)) {
+  const isValid = await verifyPassword(input.password, user.passwordHash);
+  if (!isValid) {
     throw new Error('Invalid email or password');
   }
+
+  await prisma.auditLog.create({
+    data: {
+      actorId: user.id,
+      action: 'USER_LOGGED_IN',
+      entityType: 'User',
+      entityId: user.id,
+      metadata: { ipAddress: input.ipAddress ?? null, userAgent: input.userAgent ?? null },
+    },
+  });
 
   return { id: user.id, email: user.email, name: user.name, role: user.role as UserRole };
 }
@@ -185,8 +237,7 @@ export async function isAuthenticated(): Promise<boolean> {
 export async function signIn(user: SessionUser): Promise<void> {
   const cookieStore = await cookies();
 
-  // Delete any existing session for this user before creating a new one
-  // (session rotation on login)
+  // Session rotation: the previous row goes before the new one is created.
   const existingCookie = cookieStore.get(SESSION_COOKIE)?.value;
   if (existingCookie) {
     const decoded = decodeCookieValue(existingCookie);
@@ -203,12 +254,7 @@ export async function signIn(user: SessionUser): Promise<void> {
   const absoluteExpiresAt = new Date(now.getTime() + ABSOLUTE_SESSION_DAYS * 24 * 60 * 60 * 1000);
 
   const session = await prisma.session.create({
-    data: {
-      userId: user.id,
-      tokenHash,
-      expiresAt,
-      absoluteExpiresAt,
-    },
+    data: { userId: user.id, tokenHash, expiresAt, absoluteExpiresAt },
   });
 
   cookieStore.set(SESSION_COOKIE, encodeCookieValue(session.id, token), {

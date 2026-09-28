@@ -52,6 +52,13 @@ The brand is a compile-time nudge, not a guarantee — it cannot prove a value
 is integral. The real enforcement is: integer kobo everywhere, a lint rule
 against float money literals, and kobo-integer assertions in tests.
 
+The lint rule exists: `ehems/no-float-money`, in
+`eslint-rules/no-float-money.mjs`, scoped to `lib/pricing/**/*.ts`. It has to be
+a `create()` rule — `no-restricted-syntax` only tests regex selectors against
+*string* values, so `Literal[value=/^\d+\.\d/]` never matches a numeric literal
+and passes silently. That version was written and disproved by probe before the
+real rule replaced it.
+
 Never do arithmetic on money outside `lib/pricing/`. Never format money
 inside a component — use `formatNaira(kobo)` from `lib/format/`.
 

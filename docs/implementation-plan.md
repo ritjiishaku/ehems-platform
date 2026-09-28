@@ -26,12 +26,13 @@ Where a rule and the PRD disagree, the PRD wins and the rule gets fixed.
 | Tooling gates: `typecheck`, `lint`, `format:check`, `test`, `test:app`, `test:e2e`, `verify` | live, all green |
 | GitHub Actions (`.github/workflows/ci.yml`) | live — `verify`, `schema`, `database`, `e2e` |
 | Public marketing site (Home, About, Programmes, Pricing, FAQ, Contact) | live, light-only, a11y + reflow + weight tested |
-| Prisma schema, Phase 2A unblocked entities (16 models) | live, migration `0_init` applied and verified |
+| Prisma schema, Phase 2A unblocked entities (16 models) | live, migration `20260928095718_init` applied and verified |
 | `AuditLog` append-only protections (SEC-015) | live — `BEFORE UPDATE`/`DELETE`/`TRUNCATE` triggers, verified against a live Postgres |
 | Postgres session auth (`lib/auth/`), login + register, auth pages | live |
 | `lib/auth/rbac`, `lib/auth/csrf`, `lib/auth/rate-limit` | live |
 | Notification abstraction (`lib/notifications/`) | live, console provider only |
-| Payments, pricing engine, certificates, admin panel, RBAC matrix, materials | **not started** |
+| Pricing engine (`lib/pricing/`) | live — engine complete, display **blocked** (D-1, D-2) |
+| Payments, certificates, admin panel, RBAC matrix, materials | **not started** |
 
 The `prisma/` schema now has a real migration history, applied and verified against
 a live Postgres, and the `AuditLog` append-only protections (Phase 1 step 9) are
@@ -47,6 +48,28 @@ in place. Two things about them are worth knowing before the next schema change:
   revoke was written first and verified to be inert: the datasource owns the table
   and is a superuser, and both bypass privilege checks, so TRUNCATE still
   succeeded. The trigger refuses it for every role.
+
+The pricing engine (Phase 7) is live, and a few things about it are worth
+knowing before the next schema change:
+
+- **The tier catalogue is the single source of truth, and it is code, not
+  seed data.** `lib/pricing/tiers.ts` is the only place tier names, prices, and
+  display order are written. The landing page and the pricing page both read
+  from it rather than keeping their own arrays, so the two can no longer drift.
+- **BR-016 is enforced by the type system, not by a filter.** Tiers II, VI and
+  VII are absent from the `TierId` union, so no comparison function can be
+  handed a retired tier. The test asserting their absence is a second line of
+  defence, not the mechanism.
+- **The engine renders nothing.** No naira figure reaches the DOM while D-2 is
+  open, so a visitor is never shown a discount they will not be charged.
+- **Two lint rules hold the line, and both were proven with throwaway probe
+  files rather than assumed.** `ehems/no-float-money` rejects a non-integer
+  numeric literal in `lib/pricing/`, which the `Kobo` brand cannot catch, and a
+  `no-restricted-syntax` block rejects framework, Prisma, `server-only`, db, and
+  dynamic imports from the same directory. The first attempt at the float rule
+  was written as a selector and was **vacuous** — ESLint's selector engine tests
+  regexes against string values only, so it silently ignored every numeric
+  literal. The probe caught it; the rule was rewritten as a `create()` rule.
 
 Three things deliberately absent from the landing page, each for a recorded
 reason rather than oversight:
@@ -149,14 +172,14 @@ as build-around; each affected phase below names how.
 | Phase | Scope | Status |
 | --- | --- | --- |
 | 0 | Decisions and stack confirmation | **waiting on client** |
-| 1 | Foundation, token pipeline wiring, test tooling | **can start** |
-| 2A | Domain model — unblocked entities | **can start after 1** |
+| 1 | Foundation, token pipeline wiring, test tooling | **live** |
+| 2A | Domain model — unblocked entities | **live** — 16 models, migration applied |
 | 2B | Domain model — roles, enrolment, certificates | **blocked** (D-3, D-4, D-5, D-12) |
-| 3 | Public marketing site | **can start after 1** |
-| 4 | Notification abstraction | **can start after 2A** |
-| 5 | Auth, sessions, consent capture | **can start after 2A** |
+| 3 | Public marketing site | **live** |
+| 4 | Notification abstraction | **live** — console provider only |
+| 5 | Auth, sessions, consent capture | **live** |
 | 6 | RBAC and permissions | **blocked** (D-3, D-12) |
-| 7 | Pricing engine | engine **can start**; display **blocked** (D-1, D-2) |
+| 7 | Pricing engine | **engine live**; display **blocked** (D-1, D-2) |
 | 8 | Payments and manual verification | **blocked** (D-1, D-4, D-8) |
 | 9 | Member dashboard | **blocked** (D-1, D-4, D-6) |
 | 10 | Programme and session CMS | **blocked** (D-4) |
@@ -213,9 +236,15 @@ lint/typecheck/test gate.
 4. Load Montserrat via `next/font`. Note the risk: `next/font/google` fetches at
    build time, which breaks offline builds and adds a network dependency to CI.
    Prefer self-hosting the woff2 files and pointing `next/font/local` at them.
-5. Add ESLint and Prettier with the repo's conventions, including the
-   `import/no-server-only` guard so `lib/` code cannot pull in a framework
-   import, and the rule that keeps `any` out in favour of `unknown`.
+5. Add ESLint and Prettier with the repo's conventions, including a guard so
+   `lib/pricing/` cannot pull in a framework or database import, and the rule
+   that keeps `any` out in favour of `unknown`. **Both are now implemented.**
+   The plan originally asked for `import/no-server-only`; that was the wrong
+   shape. It guards client/server boundaries and needs a new dependency, whereas
+   the actual invariant is that a money module stays pure. Purity is enforced
+   with `no-restricted-syntax` in `eslint.config.mjs`, and the float-money rule
+   is a small local plugin (`eslint-rules/no-float-money.mjs`) because
+   `no-restricted-syntax` cannot match a regex against a numeric literal.
 6. Add Vitest + React Testing Library + `vitest-axe` for app code, and Playwright
    for E2E, **alongside** the existing `node:test` token suite.
 7. Stand up Prisma against PostgreSQL, migration scripts, and a local dev
@@ -408,6 +437,10 @@ would silently pass review.
 ---
 
 ### Phase 7 — Pricing engine
+
+**Status: engine complete, display blocked.** Shipped in `d0ee762`; the gate
+below is met with 28 tests in `test/pricing.test.ts`. What remains for this
+phase is the D-1/D-2 display work, which cannot start.
 
 **Goal:** pure, exhaustively tested money maths.
 

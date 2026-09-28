@@ -1,6 +1,7 @@
 import { defineConfig, globalIgnores } from 'eslint/config';
 import nextVitals from 'eslint-config-next/core-web-vitals';
 import nextTs from 'eslint-config-next/typescript';
+import { noFloatMoney } from './eslint-rules/no-float-money.mjs';
 
 // A component reaching for a raw colour is the failure this repo's whole token
 // pipeline exists to prevent: a hex in a component bypasses the contrast audit,
@@ -23,6 +24,17 @@ const rawColourRules = [
       'No rgb or hsl colour function literals. Colour comes from a semantic role in tokens.json — add a role and run `npm run build:tokens`.',
   },
 ];
+
+// `lib/pricing/` is the only place money arithmetic is allowed, and the
+// implementation plan requires it to be pure: no framework imports, so it can be
+// unit-tested without a server. The plan suggested `import/no-server-only`, which
+// would need a new dependency and is the wrong shape anyway — that rule guards
+// client/server boundaries, whereas this constrains what a money module imports.
+//
+// The two rules below implement `.agents/rules/code-style.md` §Money and
+// §Architecture, both scoped to this directory. Purity is enforced with
+// `no-restricted-syntax`; the float rule needs a real ESLint rule because the
+// selector engine cannot match a regex against a numeric value.
 
 const eslintConfig = defineConfig([
   ...nextVitals,
@@ -86,6 +98,35 @@ const eslintConfig = defineConfig([
     rules: {
       'no-restricted-syntax': 'off',
       '@typescript-eslint/no-require-imports': 'off',
+    },
+  },
+  {
+    files: ['lib/pricing/**/*.ts'],
+    plugins: { ehems: { rules: { 'no-float-money': noFloatMoney } } },
+    rules: {
+      'ehems/no-float-money': 'error',
+      'no-restricted-syntax': [
+        'error',
+        ...rawColourRules,
+        {
+          // Purity is what makes the engine testable and the BR rules auditable.
+          // A framework or database import here would make the money maths depend
+          // on a running app, and the tests would stop being a real check.
+          // Relative imports between pricing modules stay allowed — they are
+          // re-listed explicitly so the exclusion is deliberate, not an oversight.
+          selector:
+            'ImportDeclaration[source.value=/^(next|react|react-dom|@prisma\\/client|server-only|@\\/db)/]',
+          message:
+            'lib/pricing/ must stay pure — no framework, Prisma, or db imports. Money maths belongs here; anything needing a database does not.',
+        },
+        {
+          // A dynamic import is invisible to the selector above, so it would slip
+          // past the purity guarantee while appearing to respect it.
+          selector: 'ImportExpression',
+          message:
+            'No dynamic imports in lib/pricing/ — use a static import so the purity rule can see it.',
+        },
+      ],
     },
   },
   globalIgnores([

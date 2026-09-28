@@ -1,0 +1,23 @@
+{
+  // ts-node needs CommonJS to execute a script directly, but the root tsconfig
+  // targets `module: esnext` for the Next.js bundler. The previous workaround
+  // passed the override on the command line:
+  //
+  //   ts-node --compiler-options '{"module":"CommonJS"}'
+  //
+  // which only works where the shell strips single quotes. npm on Windows hands
+  // them to ts-node verbatim, so the seed failed with
+  // `'{module:CommonJS}' is not valid JSON` - a bug CI on ubuntu would never
+  // catch, because ubuntu happens to parse it correctly.
+  //
+  // moduleResolution is overridden too: "bundler" is only legal when module is
+  // "esnext" or "preserve", so leaving it in place alongside CommonJS is an
+  // invalid combination.
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "module": "CommonJS",
+    "moduleResolution": "node",
+    "noEmit": false,
+    "incremental": false
+  }
+}

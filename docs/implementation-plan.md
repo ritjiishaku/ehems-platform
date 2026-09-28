@@ -24,18 +24,29 @@ Where a rule and the PRD disagree, the PRD wins and the rule gets fixed.
 | Token pipeline (`tokens.json` → `styles/tokens.css`, WCAG AA audit) | live, 219 properties, 102 role pairs audited |
 | MD3 type roles (15) + `motion-*` tokens, bound as Tailwind v4 utilities | live, pinned by the token test |
 | Tooling gates: `typecheck`, `lint`, `format:check`, `test`, `test:app`, `test:e2e`, `verify` | live, all green |
+| GitHub Actions (`.github/workflows/ci.yml`) | live — `verify`, `schema`, `database`, `e2e` |
 | Public marketing site (Home, About, Programmes, Pricing, FAQ, Contact) | live, light-only, a11y + reflow + weight tested |
-| Prisma schema, Phase 2A unblocked entities (16 models) | live, no migration generated yet |
+| Prisma schema, Phase 2A unblocked entities (16 models) | live, migration `0_init` applied and verified |
+| `AuditLog` append-only protections (SEC-015) | live — `BEFORE UPDATE`/`DELETE`/`TRUNCATE` triggers, verified against a live Postgres |
 | Postgres session auth (`lib/auth/`), login + register, auth pages | live |
 | `lib/auth/rbac`, `lib/auth/csrf`, `lib/auth/rate-limit` | live |
 | Notification abstraction (`lib/notifications/`) | live, console provider only |
 | Payments, pricing engine, certificates, admin panel, RBAC matrix, materials | **not started** |
 
-The `prisma/` schema exists but **no migration has been generated**, so there is
-no database behind it yet and `db:migrate` has never been run. `AuditLog`
-append-only protections (Phase 1 step 9) are likewise still outstanding — they
-are specified in the schema comments and in `docs/implementation-plan.md` §Phase
-1, but a trigger cannot be added retroactively without a migration.
+The `prisma/` schema now has a real migration history, applied and verified against
+a live Postgres, and the `AuditLog` append-only protections (Phase 1 step 9) are
+in place. Two things about them are worth knowing before the next schema change:
+
+- **The protections are hand-written SQL in the migration, not schema.** Prisma
+  cannot express triggers, so `prisma migrate dev` is blind to them and will not
+  recreate one that goes missing in a dev database.
+  `scripts/verify-audit-trigger.sql` is the only thing that notices, and CI runs
+  it. The script was confirmed to fail when a trigger is dropped, so it is not a
+  vacuous check.
+- **TRUNCATE is refused by a `BEFORE TRUNCATE` trigger, not by `REVOKE`.** The
+  revoke was written first and verified to be inert: the datasource owns the table
+  and is a superuser, and both bypass privilege checks, so TRUNCATE still
+  succeeded. The trigger refuses it for every role.
 
 Three things deliberately absent from the landing page, each for a recorded
 reason rather than oversight:

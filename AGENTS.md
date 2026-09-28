@@ -54,19 +54,31 @@ npm run test:e2e         # playwright — builds, then runs against a prod serve
 npm run verify           # the gate: check:tokens + typecheck + lint + format:check + test + test:app
 npm run build:tokens     # regenerate styles/tokens.css
 npm run check:tokens     # fail if styles/tokens.css is stale
-npm run db:migrate       # prisma migrate dev        (not scaffolded yet)
-npm run db:seed          # seed tiers, certs, roles  (not scaffolded yet)
-npm run db:studio        # prisma studio             (not scaffolded yet)
+npm run db:generate       # prisma generate  (required after `npm ci`; the client is not committed)
+npm run db:migrate        # prisma migrate dev   — create + apply a migration
+npm run db:deploy         # prisma migrate deploy — apply migrations only, no shadow DB
+npm run db:seed           # Phase 2A data: community links, retention, settings
+npm run db:studio         # prisma studio
 ```
 
 Never commit with failing `typecheck`, `lint`, or `test`.
 
-**What exists today** is the token pipeline, the tooling gates, and the landing
-page at `/`. There is no `prisma/`, no auth, and no payment code — the `db:*`
-scripts are placeholders and will error until Phase 2.
+**What exists today** is the token pipeline, the tooling gates, the landing page
+at `/`, the Phase 2A schema with a real migration history, and session auth. There
+is no payment code, and `db:seed` seeds only Phase 2A data — tiers, certificates
+and roles stay unseeded until D-3 and D-5 are answered.
 
-Two traps worth knowing before you touch the gates:
+Three traps worth knowing before you touch the gates or the database:
 
+- **The `audit_log` protections are hand-written SQL, not schema.** Prisma cannot
+  express triggers, so they live in `prisma/migrations/*_init/migration.sql` and
+  `prisma migrate dev` is blind to them: if you drop one in a dev database,
+  nothing recreates it. `scripts/verify-audit-trigger.sql` is the only thing that
+  notices, and CI runs it. TRUNCATE is blocked by a `BEFORE TRUNCATE` trigger, not
+  by `REVOKE` — the revoke is inert while the datasource owns the table.
+- **A native Postgres on your machine may already own port 5432.** Check before
+  assuming Docker got the port; the container maps `5432:5433` locally when it
+  did not.
 - **Never run Prettier over `styles/tokens.css`.** It is compared
   byte-for-byte by `check:tokens`; reformatting it makes `verify` permanently
   red. `.prettierignore` excludes it.

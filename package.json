@@ -19,7 +19,8 @@
     "format:check": "prettier --check app components lib styles test",
     "verify": "npm run check:tokens && npm run typecheck && npm run lint && npm run format:check && npm run test",
     "db:migrate": "prisma migrate dev",
-    "db:seed": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' prisma/seed.ts",
+    "db:deploy": "prisma migrate deploy",
+    "db:seed": "ts-node -P prisma/tsconfig.seed.json prisma/seed.ts",
     "db:studio": "prisma studio",
     "db:generate": "prisma generate"
   },

@@ -24,13 +24,16 @@ import { prisma } from '@/lib/db/client';
 import { sendNotification } from '@/lib/notifications';
 import { CONSENT_TEXT, CONSENT_VERSION } from '@/lib/ndpa/consent';
 
-export type UserRole = 'member' | 'admin' | 'super-admin';
+import type { RoleKey } from '@/lib/permissions/roles';
+
+export type UserRole = RoleKey; // kept for callers that import this name
 
 export type SessionUser = {
   id: string;
   email: string;
   name: string;
-  role: UserRole;
+  /** Code-safe role key, e.g. 'member' | 'admin' | 'superAdmin'. Defaults to 'visitor' when no role is assigned. */
+  role: RoleKey;
 };
 
 const SESSION_COOKIE = 'ehems_session';
@@ -118,7 +121,15 @@ export async function registerUser(input: {
   // breach, and a consent record without its user would be an orphan.
   const user = await prisma.$transaction(async (tx) => {
     const created = await tx.user.create({
-      data: { email: normalizedEmail, name: trimmedName, passwordHash, role: 'member' },
+      data: {
+        email: normalizedEmail,
+        name: trimmedName,
+        passwordHash,
+        // Assign the 'member' role by connecting to the seeded Role row.
+        roleRef: { connect: { name: 'member' } },
+        userRoles: { create: { roleId: 'role-member' } },
+      },
+      include: { roleRef: true },
     });
 
     await tx.consentRecord.create({
@@ -158,7 +169,12 @@ export async function registerUser(input: {
     payload: { name: user.name },
   }).catch(() => null);
 
-  return { id: user.id, email: user.email, name: user.name, role: user.role as UserRole };
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    role: (user.roleRef?.name ?? 'visitor') as RoleKey,
+  };
 }
 
 export async function authenticateUser(input: {
@@ -168,7 +184,10 @@ export async function authenticateUser(input: {
   userAgent?: string;
 }): Promise<SessionUser> {
   const normalizedEmail = input.email.trim().toLowerCase();
-  const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+  const user = await prisma.user.findUnique({
+    where: { email: normalizedEmail },
+    include: { roleRef: true },
+  });
 
   // Hash a throwaway password when the account is unknown so the response time
   // does not reveal whether the address is registered.
@@ -192,7 +211,12 @@ export async function authenticateUser(input: {
     },
   });
 
-  return { id: user.id, email: user.email, name: user.name, role: user.role as UserRole };
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    role: (user.roleRef?.name ?? 'visitor') as RoleKey,
+  };
 }
 
 export async function getCurrentUser(): Promise<SessionUser | null> {
@@ -208,7 +232,7 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
 
   const session = await prisma.session.findUnique({
     where: { id: sessionId },
-    include: { user: true },
+    include: { user: { include: { roleRef: true } } },
   });
 
   if (!session) return null;
@@ -226,7 +250,7 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
     id: session.user.id,
     email: session.user.email,
     name: session.user.name,
-    role: session.user.role as UserRole,
+    role: (session.user.roleRef?.name ?? 'visitor') as RoleKey,
   };
 }
 

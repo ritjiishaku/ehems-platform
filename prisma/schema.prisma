@@ -4,9 +4,10 @@
 // ONLY unblocked entities are modelled here. Blocked entities wait for their
 // respective decisions in docs/decisions.md:
 //
-//   D-3  / D-12 → Role, RolePermission, Permission         (Phase 2B)
-//   D-4         → Enrolment, AttendanceRecord              (Phase 2B)
-//   D-5         → Tier seed, MemberCertificate catalogue   (Phase 2B)
+//   D-3  / D-12 → Role (Resolved to 5 roles, no RolePermission table)
+//   D-4         → Enrolment, EnrolmentProgramme, AttendanceRecord (Phase 2B)
+//   D-5         → Tier, MemberCertificate, TierCertificate (Phase 2B)
+//   D-6         → Material (Phase 2B)
 //   D-1  / D-8  → Payment, PaymentAuditEntry              (Phase 8)
 //
 // Conventions (AGENTS.md §7):
@@ -39,28 +40,33 @@ datasource db {
 // in lib/validation/ not here.
 // ---------------------------------------------------------------------------
 model User {
-  id                  String    @id @default(cuid()) @map("id")
-  email               String    @unique @map("email")
-  name                String    @map("name")
-  phone               String?   @map("phone")
-  passwordHash        String    @map("password_hash")
-  // role is a plain String for Phase 1. Phase 2B will add a Role model and a
-  // foreign key once D-3 is resolved. The value stays "member" | "admin" |
-  // "super-admin" until then — matching the UserRole type in lib/auth.ts.
-  role                String    @default("member") @map("role")
-  deletedAt           DateTime? @map("deleted_at")
-  dataRetentionUntil  DateTime? @map("data_retention_until")
-  createdAt           DateTime  @default(now()) @map("created_at")
-  updatedAt           DateTime  @updatedAt @map("updated_at")
+  id                 String    @id @default(cuid()) @map("id")
+  email              String    @unique @map("email")
+  name               String    @map("name")
+  phone              String?   @map("phone")
+  passwordHash       String    @map("password_hash")
+  // FK to Role (Phase 2B) � the single authoritative "current role" the session reads.
+  // Nullable because a user with no role holds NO permissions.
+  roleId             String?   @map("role_id")
+  deletedAt          DateTime? @map("deleted_at")
+  dataRetentionUntil DateTime? @map("data_retention_until")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
 
   sessions            Session[]
   consentRecords      ConsentRecord[]
   dataSubjectRequests DataSubjectRequest[]
   notifications       Notification[]
   actorAuditLogs      AuditLog[]           @relation("AuditLogActor")
+  roleRef             Role?                @relation("UserCurrentRole", fields: [roleId], references: [id], onDelete: SetNull)
+  userRoles           UserRole[]
+  enrolments          Enrolment[]
+  attendanceRecords   AttendanceRecord[]
+  certificates        MemberCertificate[]
 
   @@index([email])
   @@index([deletedAt])
+  @@index([roleId])
   @@map("user")
 }
 
@@ -76,16 +82,16 @@ model User {
 // (D-14 proposed default; see docs/decisions.md).
 // ---------------------------------------------------------------------------
 model Session {
-  id               String   @id @default(cuid()) @map("id")
-  userId           String   @map("user_id")
-  tokenHash        String   @unique @map("token_hash")
-  createdAt        DateTime @default(now()) @map("created_at")
-  expiresAt        DateTime @map("expires_at")
+  id                String   @id @default(cuid()) @map("id")
+  userId            String   @map("user_id")
+  tokenHash         String   @unique @map("token_hash")
+  createdAt         DateTime @default(now()) @map("created_at")
+  expiresAt         DateTime @map("expires_at")
   absoluteExpiresAt DateTime @map("absolute_expires_at")
-  ipAddress        String?  @map("ip_address")
-  userAgent        String?  @map("user_agent")
+  ipAddress         String?  @map("ip_address")
+  userAgent         String?  @map("user_agent")
 
-  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([tokenHash])
@@ -110,7 +116,7 @@ model ConsentRecord {
   userAgent      String?   @map("user_agent")
   withdrawnAt    DateTime? @map("withdrawn_at")
 
-  user           User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
 
   @@index([userId])
   @@index([withdrawnAt])
@@ -136,7 +142,7 @@ model AuditLog {
   metadata   Json?    @map("metadata")
   createdAt  DateTime @default(now()) @map("created_at")
 
-  actor      User?    @relation("AuditLogActor", fields: [actorId], references: [id], onDelete: SetNull)
+  actor User? @relation("AuditLogActor", fields: [actorId], references: [id], onDelete: SetNull)
 
   @@index([actorId])
   @@index([entityType, entityId])
@@ -152,16 +158,16 @@ model AuditLog {
 // requestType uses a plain String; lib/validation/ enforces the enum values.
 // ---------------------------------------------------------------------------
 model DataSubjectRequest {
-  id          String    @id @default(cuid()) @map("id")
-  userId      String    @map("user_id")
-  requestType String    @map("request_type")
-  status      String    @default("pending") @map("status")
-  handlingNotes String? @map("handling_notes")
-  resolvedAt  DateTime? @map("resolved_at")
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
+  id            String    @id @default(cuid()) @map("id")
+  userId        String    @map("user_id")
+  requestType   String    @map("request_type")
+  status        String    @default("pending") @map("status")
+  handlingNotes String?   @map("handling_notes")
+  resolvedAt    DateTime? @map("resolved_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
 
-  user        User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
 
   @@index([userId])
   @@index([status])
@@ -175,15 +181,15 @@ model DataSubjectRequest {
 // ndpcNotifiedAt. The application computes the window from detectedAt.
 // ---------------------------------------------------------------------------
 model BreachIncident {
-  id              String    @id @default(cuid()) @map("id")
-  detectedAt      DateTime  @map("detected_at")
-  affectedCount   Int       @map("affected_count")
-  riskLevel       String    @map("risk_level")
-  description     String    @map("description")
-  ndpcNotifiedAt  DateTime? @map("ndpc_notified_at")
-  resolvedAt      DateTime? @map("resolved_at")
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
+  id             String    @id @default(cuid()) @map("id")
+  detectedAt     DateTime  @map("detected_at")
+  affectedCount  Int       @map("affected_count")
+  riskLevel      String    @map("risk_level")
+  description    String    @map("description")
+  ndpcNotifiedAt DateTime? @map("ndpc_notified_at")
+  resolvedAt     DateTime? @map("resolved_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
 
   @@index([detectedAt])
   @@map("breach_incident")
@@ -198,17 +204,17 @@ model BreachIncident {
 // logic without a separate table.
 // ---------------------------------------------------------------------------
 model Notification {
-  id              String    @id @default(cuid()) @map("id")
-  userId          String?   @map("user_id")
-  channel         String    @map("channel")
-  template        String    @map("template")
-  payload         Json?     @map("payload")
-  sentAt          DateTime? @map("sent_at")
-  failedAt        DateTime? @map("failed_at")
-  failureReason   String?   @map("failure_reason")
-  createdAt       DateTime  @default(now()) @map("created_at")
+  id            String    @id @default(cuid()) @map("id")
+  userId        String?   @map("user_id")
+  channel       String    @map("channel")
+  template      String    @map("template")
+  payload       Json?     @map("payload")
+  sentAt        DateTime? @map("sent_at")
+  failedAt      DateTime? @map("failed_at")
+  failureReason String?   @map("failure_reason")
+  createdAt     DateTime  @default(now()) @map("created_at")
 
-  user            User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@index([channel, sentAt])
@@ -256,7 +262,7 @@ model Product {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  orders      Order[]
+  orders Order[]
 
   @@index([active])
   @@map("product")
@@ -269,16 +275,16 @@ model Product {
 // | "cancelled". Related to Product via OrderItem join.
 // ---------------------------------------------------------------------------
 model Order {
-  id         String      @id @default(cuid()) @map("id")
-  userId     String      @map("user_id")
-  productId  String      @map("product_id")
-  totalKobo  Int         @map("total_kobo")
-  currency   String      @default("NGN") @map("currency")
-  status     String      @default("pending") @map("status")
-  createdAt  DateTime    @default(now()) @map("created_at")
-  updatedAt  DateTime    @updatedAt @map("updated_at")
+  id        String   @id @default(cuid()) @map("id")
+  userId    String   @map("user_id")
+  productId String   @map("product_id")
+  totalKobo Int      @map("total_kobo")
+  currency  String   @default("NGN") @map("currency")
+  status    String   @default("pending") @map("status")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  product    Product     @relation(fields: [productId], references: [id], onDelete: Restrict)
+  product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
 
   @@index([userId])
   @@index([productId])
@@ -292,26 +298,26 @@ model Order {
 // 2 (AGENTS.md §9 out-of-scope fence); this is the storage layer only.
 // ---------------------------------------------------------------------------
 model FeedbackForm {
-  id          String             @id @default(cuid()) @map("id")
-  title       String             @map("title")
-  description String?            @map("description")
-  active      Boolean            @default(true) @map("active")
-  createdAt   DateTime           @default(now()) @map("created_at")
-  updatedAt   DateTime           @updatedAt @map("updated_at")
+  id          String   @id @default(cuid()) @map("id")
+  title       String   @map("title")
+  description String?  @map("description")
+  active      Boolean  @default(true) @map("active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
-  responses   FeedbackResponse[]
+  responses FeedbackResponse[]
 
   @@map("feedback_form")
 }
 
 model FeedbackResponse {
-  id          String       @id @default(cuid()) @map("id")
-  formId      String       @map("form_id")
-  userId      String?      @map("user_id")
-  responseData Json        @map("response_data")
-  submittedAt DateTime     @default(now()) @map("submitted_at")
+  id           String   @id @default(cuid()) @map("id")
+  formId       String   @map("form_id")
+  userId       String?  @map("user_id")
+  responseData Json     @map("response_data")
+  submittedAt  DateTime @default(now()) @map("submitted_at")
 
-  form        FeedbackForm @relation(fields: [formId], references: [id], onDelete: Cascade)
+  form FeedbackForm @relation(fields: [formId], references: [id], onDelete: Cascade)
 
   @@index([formId])
   @@index([userId])
@@ -324,9 +330,9 @@ model FeedbackResponse {
 // Key/value config. Admins can change settings without a code deploy.
 // ---------------------------------------------------------------------------
 model SystemSetting {
-  key        String   @id @map("key")
-  value      String   @map("value")
-  updatedAt  DateTime @updatedAt @map("updated_at")
+  key       String   @id @map("key")
+  value     String   @map("value")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("system_setting")
 }
@@ -360,15 +366,18 @@ model RetentionPolicy {
 // whether someone qualified (Phase 10 note in implementation-plan.md).
 // ---------------------------------------------------------------------------
 model Programme {
-  id                  String             @id @default(cuid()) @map("id")
-  name                String             @map("name")
-  description         String?            @map("description")
-  attendanceThreshold Int                @default(60) @map("attendance_threshold")
-  active              Boolean            @default(true) @map("active")
-  createdAt           DateTime           @default(now()) @map("created_at")
-  updatedAt           DateTime           @updatedAt @map("updated_at")
+  id                  String   @id @default(cuid()) @map("id")
+  name                String   @map("name")
+  description         String?  @map("description")
+  attendanceThreshold Int      @default(60) @map("attendance_threshold")
+  active              Boolean  @default(true) @map("active")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
 
-  sessions            ProgrammeSession[]
+  sessions   ProgrammeSession[]
+  enrolments EnrolmentProgramme[]
+  materials  Material[]
+  tiers      ProgrammeTier[]
 
   @@map("programme")
 }
@@ -383,9 +392,232 @@ model ProgrammeSession {
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime  @updatedAt @map("updated_at")
 
-  programme   Programme @relation(fields: [programmeId], references: [id], onDelete: Cascade)
+  programme         Programme          @relation(fields: [programmeId], references: [id], onDelete: Cascade)
+  attendanceRecords AttendanceRecord[]
 
   @@index([programmeId])
   @@index([startsAt])
   @@map("programme_session")
+}
+
+// ---------------------------------------------------------------------------
+// Role & UserRole (D-3, D-12)
+// ---------------------------------------------------------------------------
+model Role {
+  id          String  @id @default(cuid()) @map("id")
+  name        String  @unique @map("name")
+  label       String  @map("label")
+  description String? @map("description")
+  isSystem    Boolean @default(true) @map("is_system")
+
+  currentUsers User[]     @relation("UserCurrentRole")
+  users        UserRole[]
+
+  @@map("role")
+}
+
+model UserRole {
+  userId     String   @map("user_id")
+  roleId     String   @map("role_id")
+  assignedAt DateTime @default(now()) @map("assigned_at")
+  assignedBy String?  @map("assigned_by")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@index([roleId])
+  @@index([assignedBy])
+  @@map("user_role")
+}
+
+// ---------------------------------------------------------------------------
+// Tier & Benefits
+// ---------------------------------------------------------------------------
+model Tier {
+  id                       String   @id @default(cuid()) @map("id")
+  name                     String   @unique @map("name")
+  displayOrder             Int      @map("display_order")
+  priceKobo                Int      @map("price_kobo")
+  currency                 String   @default("NGN") @map("currency")
+  mentorshipDurationMonths Int      @map("mentorship_duration_months")
+  positioningText          String?  @map("positioning_text")
+  isFree                   Boolean  @default(false) @map("is_free")
+  active                   Boolean  @default(true) @map("active")
+  createdAt                DateTime @default(now()) @map("created_at")
+  updatedAt                DateTime @updatedAt @map("updated_at")
+
+  benefits     TierBenefit[]
+  certificates TierCertificate[]
+  enrolments   Enrolment[]
+  programmes   ProgrammeTier[]
+
+  @@map("tier")
+}
+
+model TierBenefit {
+  id           String @id @default(cuid()) @map("id")
+  tierId       String @map("tier_id")
+  benefitText  String @map("benefit_text")
+  category     String @map("category")
+  displayOrder Int    @map("display_order")
+
+  tier Tier @relation(fields: [tierId], references: [id], onDelete: Cascade)
+
+  @@index([tierId])
+  @@map("tier_benefit")
+}
+
+model ProgrammeTier {
+  programmeId String @map("programme_id")
+  tierId      String @map("tier_id")
+
+  programme Programme @relation(fields: [programmeId], references: [id], onDelete: Cascade)
+  tier      Tier      @relation(fields: [tierId], references: [id], onDelete: Cascade)
+
+  @@id([programmeId, tierId])
+  @@map("programme_tier")
+}
+
+// ---------------------------------------------------------------------------
+// Certificates (Catalogue & Member)
+// ---------------------------------------------------------------------------
+model CertificateCatalogue {
+  id          String  @id @default(cuid()) @map("id")
+  name        String  @unique @map("name")
+  description String? @map("description")
+  templateUrl String? @map("template_url")
+  issuingBody String  @default("EHEMS") @map("issuing_body")
+  active      Boolean @default(true) @map("active")
+
+  tiers  TierCertificate[]
+  issued MemberCertificate[]
+
+  @@map("certificate_catalogue")
+}
+
+model TierCertificate {
+  tierId        String @map("tier_id")
+  certificateId String @map("certificate_id")
+
+  tier        Tier                 @relation(fields: [tierId], references: [id], onDelete: Cascade)
+  certificate CertificateCatalogue @relation(fields: [certificateId], references: [id], onDelete: Cascade)
+
+  @@id([tierId, certificateId])
+  @@map("tier_certificate")
+}
+
+model MemberCertificate {
+  id             String   @id @default(cuid()) @map("id")
+  userId         String   @map("user_id")
+  certificateId  String   @map("certificate_id")
+  enrolmentId    String   @map("enrolment_id")
+  issuedAt       DateTime @default(now()) @map("issued_at")
+  issuedBy       String?  @map("issued_by")
+  verificationId String   @unique @map("verification_id")
+  status         String   @default("active") @map("status")
+
+  user        User                 @relation(fields: [userId], references: [id], onDelete: Restrict)
+  certificate CertificateCatalogue @relation(fields: [certificateId], references: [id], onDelete: Restrict)
+  enrolment   Enrolment            @relation(fields: [enrolmentId], references: [id], onDelete: Restrict)
+
+  @@index([userId])
+  @@index([enrolmentId])
+  @@map("member_certificate")
+}
+
+// ---------------------------------------------------------------------------
+// Enrolment & Attendance
+// ---------------------------------------------------------------------------
+model Enrolment {
+  id                           String    @id @default(cuid()) @map("id")
+  userId                       String    @map("user_id")
+  tierId                       String    @map("tier_id")
+  status                       String    @default("pending_payment") @map("status")
+  enrolledAt                   DateTime  @default(now()) @map("enrolled_at")
+  completedAt                  DateTime? @map("completed_at")
+  completionMarkedBy           String?   @map("completion_marked_by")
+  attendancePercentage         Int       @default(0) @map("attendance_percentage")
+  assignmentChecklistCompleted Boolean   @default(false) @map("assignment_checklist_completed")
+  certificateEligible          Boolean   @default(false) @map("certificate_eligible")
+  upgradeFromEnrolmentId       String?   @map("upgrade_from_enrolment_id")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  tier Tier @relation(fields: [tierId], references: [id], onDelete: Restrict)
+
+  programmes           EnrolmentProgramme[]
+  attendanceRecords    AttendanceRecord[]
+  assignmentChecklists AssignmentChecklist[]
+  certificates         MemberCertificate[]
+
+  @@index([userId])
+  @@index([tierId])
+  @@map("enrolment")
+}
+
+model EnrolmentProgramme {
+  enrolmentId         String @map("enrolment_id")
+  programmeId         String @map("programme_id")
+  attendanceThreshold Int    @map("attendance_threshold") // Snapshotted from Programme
+
+  enrolment Enrolment @relation(fields: [enrolmentId], references: [id], onDelete: Cascade)
+  programme Programme @relation(fields: [programmeId], references: [id], onDelete: Cascade)
+
+  @@id([enrolmentId, programmeId])
+  @@map("enrolment_programme")
+}
+
+model AttendanceRecord {
+  id          String   @id @default(cuid()) @map("id")
+  userId      String   @map("user_id")
+  sessionId   String   @map("session_id")
+  enrolmentId String   @map("enrolment_id")
+  status      String   @map("status") // present, absent, late, excused
+  method      String   @map("method") // qr, manual, fallback_code
+  markedBy    String?  @map("marked_by")
+  markedAt    DateTime @default(now()) @map("marked_at")
+  notes       String?  @map("notes")
+
+  user      User             @relation(fields: [userId], references: [id], onDelete: Restrict)
+  session   ProgrammeSession @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  enrolment Enrolment        @relation(fields: [enrolmentId], references: [id], onDelete: Restrict)
+
+  @@index([userId])
+  @@index([sessionId])
+  @@index([enrolmentId])
+  @@map("attendance_record")
+}
+
+model AssignmentChecklist {
+  id              String    @id @default(cuid()) @map("id")
+  enrolmentId     String    @map("enrolment_id")
+  requirementName String    @map("requirement_name")
+  isCompleted     Boolean   @default(false) @map("is_completed")
+  completedAt     DateTime? @map("completed_at")
+  markedBy        String?   @map("marked_by")
+  notes           String?   @map("notes")
+
+  enrolment Enrolment @relation(fields: [enrolmentId], references: [id], onDelete: Cascade)
+
+  @@index([enrolmentId])
+  @@map("assignment_checklist")
+}
+
+// ---------------------------------------------------------------------------
+// Material (D-6)
+// ---------------------------------------------------------------------------
+model Material {
+  id          String   @id @default(cuid()) @map("id")
+  programmeId String   @map("programme_id")
+  title       String   @map("title")
+  description String?  @map("description")
+  fileUrl     String   @map("file_url")
+  active      Boolean  @default(true) @map("active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  programme Programme @relation(fields: [programmeId], references: [id], onDelete: Cascade)
+
+  @@index([programmeId])
+  @@map("material")
 }

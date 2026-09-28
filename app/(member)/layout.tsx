@@ -1,6 +1,16 @@
 import Link from 'next/link';
+import { requireSession } from '@/lib/auth/rbac';
 
-export default function MemberLayout({ children }: { children: React.ReactNode }) {
+/**
+ * Member area shell.
+ *
+ * `requireSession()` runs server-side on every request under this layout, before
+ * any child renders. Hiding the dashboard link in the public nav is not access
+ * control — the check has to happen here, or the route is simply reachable.
+ */
+export default async function MemberLayout({ children }: { children: React.ReactNode }) {
+  await requireSession();
+
   return (
     <div className="min-h-screen bg-background text-on-surface">
       <header className="border-b border-outline-variant bg-surface-container">

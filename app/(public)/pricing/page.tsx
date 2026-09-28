@@ -4,6 +4,7 @@ import { Eyebrow } from '@/components/ui/eyebrow';
 import { Section } from '@/components/ui/section';
 import { SectionHeading } from '@/components/ui/section-heading';
 import { LinkButton } from '@/components/ui/button';
+import { listActiveTiers, type TierId } from '@/lib/pricing';
 
 export const metadata: Metadata = {
   title: 'Pricing & Membership Tiers | EHEMS Platform',
@@ -12,57 +13,55 @@ export const metadata: Metadata = {
 };
 
 /**
-  The 6 active tiers from AGENTS.md §3 / PRD §3.
-  Tiers II, VI, and VII are retired/internal and must never render (BR-016).
+ * Presentation only, keyed by `TierId`. The tier names, order, mentorship
+ * duration, and community access level all come from `lib/pricing/tiers.ts`,
+ * which is the single code-level catalogue. This page previously held its own
+ * copy of the six names, which had already drifted from the copy in
+ * `tier-overview.tsx`; a rename in one would have silently disagreed with the
+ * other, and BR-016 makes those names a contract.
+ *
+ * `communityAccessLabel` renders the BR-011 entitlement. The entitlement itself
+ * is `tier.communityAccess`; the wording is a display concern and belongs here.
  */
-const ACTIVE_TIERS = [
-  {
-    name: "O'Free Levels",
-    mentorship: 'Community access',
-    communityAccess: 'General Community Access',
+const PRESENTATION: Record<
+  TierId,
+  { description: string; communityAccessLabel: string; highlight: boolean; badge?: string }
+> = {
+  'o-free': {
     description: 'Entry-level access to platform orientation, brochure, and community forums.',
+    communityAccessLabel: 'General Community Access',
     highlight: false,
     badge: 'Free Tier',
   },
-  {
-    name: 'Basic Level',
-    mentorship: '1 month mentorship',
-    communityAccess: 'General Community Access',
+  basic: {
     description: 'Your first structured step into practical healthcare business building.',
+    communityAccessLabel: 'General Community Access',
     highlight: false,
   },
-  {
-    name: 'Basic Level III',
-    mentorship: '1 month mentorship',
-    communityAccess: 'General Community Access',
+  'basic-iii': {
     description: 'Deeper foundational modules and structured assignments on the entry path.',
+    communityAccessLabel: 'General Community Access',
     highlight: false,
   },
-  {
-    name: 'Advanced Level IV',
-    mentorship: '2 months mentorship',
-    communityAccess: 'EHEMS OPEN Sales & Marketing',
+  'advanced-iv': {
     description: 'Unlocks EHEMS OPEN benefits for promoting and scaling your healthcare business.',
+    communityAccessLabel: 'EHEMS OPEN Sales & Marketing',
     highlight: true,
     badge: 'Most Popular',
   },
-  {
-    name: 'Advanced Level V',
-    mentorship: '3 months mentorship',
-    communityAccess: 'EHEMS OPEN Sales & Marketing',
+  'advanced-v': {
     description: 'Extended hands-on mentorship designed for growing healthcare enterprises.',
+    communityAccessLabel: 'EHEMS OPEN Sales & Marketing',
     highlight: false,
   },
-  {
-    name: 'Higher Advanced VIII',
-    mentorship: '6 months mentorship',
-    communityAccess: 'EHEMS OPEN Sales & Marketing',
+  'higher-advanced-viii': {
     description:
       'The highest tier of direct executive mentorship and strategic guidance EHEMS offers.',
+    communityAccessLabel: 'EHEMS OPEN Sales & Marketing',
     highlight: false,
     badge: 'Executive Tier',
   },
-];
+};
 
 export default function PricingPage() {
   return (
@@ -77,58 +76,63 @@ export default function PricingPage() {
 
         {/* Tier Cards Grid */}
         <div className="mt-12 grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
-          {ACTIVE_TIERS.map((tier) => (
-            <div
-              key={tier.name}
-              className={`relative flex flex-col justify-between rounded-3xl border p-7 transition-all ${
-                tier.highlight
-                  ? 'border-primary bg-surface-container-lowest shadow-lg ring-2 ring-primary/20'
-                  : 'border-outline-variant bg-surface-container-lowest shadow-sm hover:border-outline'
-              }`}
-            >
-              <div>
-                {tier.badge && (
-                  <span
-                    className={`label-small inline-block rounded-full px-3 py-1 font-semibold ${
-                      tier.highlight
-                        ? 'bg-primary text-on-primary'
-                        : 'bg-secondary-container text-on-secondary-container'
-                    }`}
-                  >
-                    {tier.badge}
-                  </span>
-                )}
-                <h2 className="headline-small mt-4 font-bold text-on-surface">{tier.name}</h2>
-                <p className="body-medium text-on-surface-variant mt-2">{tier.description}</p>
+          {listActiveTiers().map((tier) => {
+            const presentation = PRESENTATION[tier.id];
+            return (
+              <div
+                key={tier.id}
+                className={`relative flex flex-col justify-between rounded-3xl border p-7 transition-all ${
+                  presentation.highlight
+                    ? 'border-primary bg-surface-container-lowest shadow-lg ring-2 ring-primary/20'
+                    : 'border-outline-variant bg-surface-container-lowest shadow-sm hover:border-outline'
+                }`}
+              >
+                <div>
+                  {presentation.badge && (
+                    <span
+                      className={`label-small inline-block rounded-full px-3 py-1 font-semibold ${
+                        presentation.highlight
+                          ? 'bg-primary text-on-primary'
+                          : 'bg-secondary-container text-on-secondary-container'
+                      }`}
+                    >
+                      {presentation.badge}
+                    </span>
+                  )}
+                  <h2 className="headline-small mt-4 font-bold text-on-surface">{tier.name}</h2>
+                  <p className="body-medium text-on-surface-variant mt-2">
+                    {presentation.description}
+                  </p>
 
-                <div className="border-outline-variant mt-6 space-y-3 border-t pt-5">
-                  <div className="flex items-center gap-2">
-                    <span className="text-primary font-bold">✓</span>
-                    <span className="body-medium font-medium text-on-surface">
-                      Mentorship: {tier.mentorship}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-primary font-bold">✓</span>
-                    <span className="body-medium text-on-surface-variant">
-                      Access: {tier.communityAccess}
-                    </span>
+                  <div className="border-outline-variant mt-6 space-y-3 border-t pt-5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-primary font-bold">✓</span>
+                      <span className="body-medium font-medium text-on-surface">
+                        Mentorship: {tier.mentorship}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-primary font-bold">✓</span>
+                      <span className="body-medium text-on-surface-variant">
+                        Access: {presentation.communityAccessLabel}
+                      </span>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <div className="mt-8 pt-4">
-                <LinkButton
-                  href="/register"
-                  variant={tier.highlight ? 'primary' : 'secondary'}
-                  size="md"
-                  block
-                >
-                  Choose {tier.name}
-                </LinkButton>
+                <div className="mt-8 pt-4">
+                  <LinkButton
+                    href="/register"
+                    variant={presentation.highlight ? 'primary' : 'secondary'}
+                    size="md"
+                    block
+                  >
+                    Choose {tier.name}
+                  </LinkButton>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         {/* Upgrade & Business Rules Callout */}

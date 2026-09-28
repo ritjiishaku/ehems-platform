@@ -245,16 +245,28 @@ test.describe('landing page', () => {
     );
   });
 
-  test('serves a branded 404 for routes that are not built yet', async ({ page }) => {
-    // Every planned page that has not been built (About, Products, Events,
-    // Pricing, FAQ, Contact, register, …) must fail closed to a real 404 that
-    // offers a way back - not a blank frame, and not a dangling in-page anchor.
-    const response = await page.goto('/pricing');
+  test('serves a branded 404 for routes that do not exist', async ({ page }) => {
+    // Every planned page that has not been built (Products, Events, …) must fail
+    // closed to a real 404 that offers a way back - not a blank frame, and not a
+    // dangling in-page anchor. A route that genuinely does not exist is used
+    // here rather than one still planned: /pricing, /about, /programmes, /faq
+    // and /contact are all built now, so asserting they 404 would have pinned a
+    // fact that stopped being true.
+    const response = await page.goto('/no-such-page');
 
     expect(response?.status()).toBe(404);
     await expect(page.getByRole('heading', { level: 1, name: /page not found/i })).toBeVisible();
     const home = page.getByRole('link', { name: /back to home/i });
     await expect(home).toBeVisible();
     expect(await home.getAttribute('href')).toBe('/');
+  });
+
+  test('serves every built public page with a 200', async ({ page }) => {
+    // The counterpart to the 404 case above: if a page is built it must be
+    // reachable, which is the assertion that would have caught the stale 404.
+    for (const route of ['/', '/about', '/pricing', '/programmes', '/faq', '/contact']) {
+      const response = await page.goto(route);
+      expect(response?.status(), `${route} should be 200`).toBe(200);
+    }
   });
 });

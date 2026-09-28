@@ -2,9 +2,10 @@
 
 **Status:** Foundation slice **implemented and verified**. Next.js 16 (App
 Router) + TypeScript strict + Tailwind v4 + Prisma is scaffolded; the MD3
-typography tokens, the design-token pipeline, and the landing page at `/` are
-live. Phases 2–15 are still plan only — none of the domain, auth, or payment
-code exists. See §What has been built below.
+typography tokens, the design-token pipeline, and the public marketing site are
+live. Phase 2A schema, database session auth, and the Phase 4 notification
+abstraction are also built. Payments, pricing, certificates, RBAC, and the admin
+panel are still plan only. See §What has been built below.
 
 **Authority order:** `EHEMS PRD.md` → `AGENTS.md` → `.agents/rules/*` → this plan.
 Where this plan and a rule disagree, the rule wins and this file is wrong.
@@ -23,9 +24,18 @@ Where a rule and the PRD disagree, the PRD wins and the rule gets fixed.
 | Token pipeline (`tokens.json` → `styles/tokens.css`, WCAG AA audit) | live, 219 properties, 102 role pairs audited |
 | MD3 type roles (15) + `motion-*` tokens, bound as Tailwind v4 utilities | live, pinned by the token test |
 | Tooling gates: `typecheck`, `lint`, `format:check`, `test`, `test:app`, `test:e2e`, `verify` | live, all green |
-| Landing page at `/` (hero, benefits, how to join) | live, light-only, a11y + reflow + weight tested |
-| `lib/`, `components/ui/`, `components/landing/` | scaffolded; `lib/` holds only `cn.ts` and `theme.ts` |
-| `prisma/`, auth, payments, pricing, certificates, admin | **not started** |
+| Public marketing site (Home, About, Programmes, Pricing, FAQ, Contact) | live, light-only, a11y + reflow + weight tested |
+| Prisma schema, Phase 2A unblocked entities (16 models) | live, no migration generated yet |
+| Postgres session auth (`lib/auth/`), login + register, auth pages | live |
+| `lib/auth/rbac`, `lib/auth/csrf`, `lib/auth/rate-limit` | live |
+| Notification abstraction (`lib/notifications/`) | live, console provider only |
+| Payments, pricing engine, certificates, admin panel, RBAC matrix, materials | **not started** |
+
+The `prisma/` schema exists but **no migration has been generated**, so there is
+no database behind it yet and `db:migrate` has never been run. `AuditLog`
+append-only protections (Phase 1 step 9) are likewise still outstanding — they
+are specified in the schema comments and in `docs/implementation-plan.md` §Phase
+1, but a trigger cannot be added retroactively without a migration.
 
 Three things deliberately absent from the landing page, each for a recorded
 reason rather than oversight:

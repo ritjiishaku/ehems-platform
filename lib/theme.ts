@@ -26,18 +26,24 @@ function hslToHex(value: string): string | null {
   const s = parseFloat(match[2]) / 100;
   const l = parseFloat(match[3]) / 100;
 
+  // The standard HSL -> RGB reduction works on a six-sector wheel: the sector
+  // index is floor(h * 6) % 6, and the second component is
+  // chroma * (1 - |(h * 6) % 2 - 1|). Both terms have to be taken from h * 6.
+  // Deriving them from h * 12 instead silently rotates every colour, which is
+  // how navy.900 (hsl(218, 74%, 15%)) came out as #33430a, an olive.
   const chroma = (1 - Math.abs(2 * l - 1)) * s;
-  const secondary = chroma * (1 - Math.abs(((h * 12) % 2) - 1));
+  const wheel = h * 6;
+  const second = chroma * (1 - Math.abs((wheel % 2) - 1));
   const offset = l - chroma / 2;
 
-  const sector = Math.floor(h * 12) % 6;
+  const sector = Math.floor(wheel) % 6;
   const rgb = [
-    [chroma, secondary, 0],
-    [secondary, chroma, 0],
-    [0, chroma, secondary],
-    [0, secondary, chroma],
-    [secondary, 0, chroma],
-    [chroma, 0, secondary],
+    [chroma, second, 0],
+    [second, chroma, 0],
+    [0, chroma, second],
+    [0, second, chroma],
+    [second, 0, chroma],
+    [chroma, 0, second],
   ][sector];
 
   return `#${rgb

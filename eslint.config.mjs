@@ -77,9 +77,12 @@ const eslintConfig = defineConfig([
   },
   {
     // The token pipeline test asserts on tokens.json's raw HSL primitives and
-    // runs under node:test as CommonJS. Both rules fire on the assertions
-    // themselves rather than on app code, so they are lifted for this file only.
-    files: ['test/build-tokens.test.js'],
+    // runs under node:test as CommonJS. test/theme.test.ts pins the same raw
+    // primitives against their hex conversions, which is the only place a hex is
+    // supposed to appear — it is the assertion that keeps the conversion honest.
+    // Both rules fire on the assertions themselves rather than on app code, so
+    // they are lifted for these files only.
+    files: ['test/build-tokens.test.js', 'test/theme.test.ts'],
     rules: {
       'no-restricted-syntax': 'off',
       '@typescript-eslint/no-require-imports': 'off',

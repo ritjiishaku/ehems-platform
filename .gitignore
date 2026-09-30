@@ -20,6 +20,19 @@ Thumbs.db
 /blob-report/
 /playwright/.cache/
 
+# encrypted payment proofs (SEC-004). These are member financial documents. The
+# default `PAYMENT_PROOF_STORAGE_DIR` is `.storage/proof` inside the project, so
+# without this a local test upload would be committable. Production must point
+# the env var at a mounted volume outside the project directory — see
+# next.config.ts outputFileTracingExcludes for why bundling this is a problem.
+/.storage/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# one-off schema scripting. `prisma/schema.prisma` is the source of truth and
+# every change to it belongs in a reviewed Prisma migration, so these
+# text-splicing helpers are scaffolding, not build inputs.
+/generate_schema.py
+/patch_schema.py

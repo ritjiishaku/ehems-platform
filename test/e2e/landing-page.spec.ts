@@ -22,6 +22,30 @@ import { expect, test } from '@playwright/test';
 const GZIP_BUDGET_KB = 260;
 
 test.describe('landing page', () => {
+  test('sends a per-request nonce CSP and baseline security headers', async ({ page }) => {
+    const response = await page.goto('/');
+    expect(response?.status()).toBe(200);
+
+    const headers = response?.headers() ?? {};
+    const policy = headers['content-security-policy'] ?? '';
+    const nonce = policy.match(/'nonce-([^']+)'/)?.[1];
+
+    expect(policy).toContain("default-src 'self'");
+    expect(policy).toContain("frame-ancestors 'none'");
+    expect(nonce).toBeTruthy();
+    expect(headers['x-content-type-options']).toBe('nosniff');
+    expect(headers['referrer-policy']).toBe('strict-origin-when-cross-origin');
+    expect(headers['x-frame-options']).toBe('DENY');
+
+    const scriptNonces = await page
+      .locator('script')
+      .evaluateAll((scripts) => scripts.map((script) => (script as HTMLScriptElement).nonce));
+    expect(
+      scriptNonces.filter((scriptNonce) => scriptNonce === nonce).length,
+      `Next inline scripts should carry CSP nonce ${nonce}; received ${JSON.stringify(scriptNonces)}`,
+    ).toBeGreaterThan(0);
+  });
+
   test('serves the value proposition in the first viewport at 375px', async ({ page }) => {
     await page.goto('/');
 
@@ -268,5 +292,38 @@ test.describe('landing page', () => {
       const response = await page.goto(route);
       expect(response?.status(), `${route} should be 200`).toBe(200);
     }
+  });
+});
+
+test.describe('authentication surfaces', () => {
+  test('registration collects the confirmed profile fields on a mobile viewport', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 375, height: 667 });
+    const response = await page.goto('/register');
+
+    expect(response?.status()).toBe(200);
+    await expect(page.getByLabel('Full name')).toBeVisible();
+    await expect(page.getByLabel('Email address')).toBeVisible();
+    await expect(page.getByLabel('Nigerian phone number')).toBeVisible();
+    await expect(page.getByLabel('Profession')).toBeVisible();
+    await expect(page.getByLabel(/healthcare specialty/i)).toBeVisible();
+    await expect(page.getByLabel(/agree to the ehems terms/i)).toBeVisible();
+
+    const overflow = await page.evaluate(() => ({
+      scroll: document.documentElement.scrollWidth,
+      client: document.documentElement.clientWidth,
+    }));
+    expect(overflow.scroll).toBeLessThanOrEqual(overflow.client + 1);
+  });
+
+  test('password reset request and reset forms are reachable', async ({ page }) => {
+    await page.goto('/forgot-password');
+    await expect(page.getByRole('heading', { name: /reset your password/i })).toBeVisible();
+    await expect(page.getByLabel('Email address')).toBeVisible();
+
+    await page.goto(`/reset-password?token=${'a'.repeat(43)}`);
+    await expect(page.getByLabel('New password', { exact: true })).toBeVisible();
+    await expect(page.getByLabel('Confirm new password', { exact: true })).toBeVisible();
   });
 });

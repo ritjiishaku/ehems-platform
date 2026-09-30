@@ -1,6 +1,7 @@
 import { describe, expect, it, beforeEach } from 'vitest';
 import {
   checkRateLimit,
+  evaluateRateLimit,
   LOGIN_RATE_LIMIT,
   recordAttempt,
   resetAllRateLimits,
@@ -11,6 +12,18 @@ import {
 describe('rate limiting', () => {
   beforeEach(() => {
     resetAllRateLimits();
+  });
+
+  it('applies the same sliding-window decision used by the shared store', () => {
+    const now = 1_000_000;
+    const decision = evaluateRateLimit(
+      [now - LOGIN_RATE_LIMIT.windowMs, now - 60_000, now - 30_000],
+      LOGIN_RATE_LIMIT,
+      now,
+    );
+
+    expect(decision.activeAttempts).toEqual([now - 60_000, now - 30_000]);
+    expect(decision.verdict).toEqual({ allowed: true, remaining: 3, retryAfterSeconds: 0 });
   });
 
   it('allows an attempt while under the limit', () => {

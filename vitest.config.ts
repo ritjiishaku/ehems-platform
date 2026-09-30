@@ -18,6 +18,15 @@ export default defineConfig({
     // (docs/implementation-plan.md §0). It runs via `npm run test:tokens`, and
     // must not be collected here: vitest's default include would otherwise pick
     // up test/build-tokens.test.js and run it on a runner it was not written for.
-    exclude: ['node_modules/**', '.next/**', 'test/build-tokens.test.js'],
+    //
+    // `*.db.test.ts` needs a reachable PostgreSQL, which the `verify` job does
+    // not provide. Those files run explicitly in the CI `database` job, which
+    // has a service container.
+    exclude: [
+      'node_modules/**',
+      '.next/**',
+      'test/build-tokens.test.js',
+      '**/*.db.test.ts',
+    ],
   },
 });

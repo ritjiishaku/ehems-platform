@@ -98,6 +98,20 @@ describe('Notification Service (Phase 4 Abstraction)', () => {
     expect(consoleProvider.sentEmails[0].html).toContain('https://ehems.ng/verify/cert_789');
   });
 
+  it('sends a password reset link as a transactional email', async () => {
+    const resetUrl = 'https://ehems.example/reset-password?token=opaque-token';
+    const res = await sendNotification({
+      event: 'PASSWORD_RESET',
+      recipient: { email: 'member@example.com', name: 'Dr. Aisha Bello' },
+      payload: { name: 'Dr. Aisha Bello', resetUrl },
+    });
+
+    expect(res.success).toBe(true);
+    expect(consoleProvider.sentEmails[0].subject).toBe('Reset your EHEMS password');
+    expect(consoleProvider.sentEmails[0].text).toContain(resetUrl);
+    expect(consoleProvider.sentEmails[0].text).toContain('expires in one hour');
+  });
+
   it('fails gracefully when given an invalid email address', async () => {
     const res = await sendNotification({
       event: 'WELCOME_REGISTRATION',

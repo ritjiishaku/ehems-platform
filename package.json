@@ -8,6 +8,7 @@
     "check:tokens": "node scripts/build-tokens.js --check",
     "test:tokens": "node --test test/*.test.js",
     "test:app": "vitest run",
+    "test:db": "vitest run --config vitest.db.config.ts",
     "test": "npm run test:tokens && npm run test:app",
     "test:e2e": "playwright test",
     "dev": "next dev",
@@ -21,6 +22,8 @@
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:seed": "ts-node -P prisma/tsconfig.seed.json prisma/seed.ts",
+    "db:seed:test-payments": "ts-node -P prisma/tsconfig.seed.json prisma/seeds/test-payments.ts",
+    "db:create-admin": "ts-node -P prisma/tsconfig.seed.json scripts/create-admin.ts",
     "db:studio": "prisma studio",
     "db:generate": "prisma generate"
   },
@@ -29,6 +32,7 @@
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
+    "argon2": "^0.45.1",
     "bcryptjs": "^3.0.3",
     "next": "16.3.6",
     "react": "19.2.8",

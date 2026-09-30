@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { nigerianPhoneSchema } from './phone';
 
 /**
  * Auth boundary schemas (Zod 4).
@@ -27,6 +28,13 @@ export const registerSchema = z.object({
     .min(2, 'Full name must be at least 2 characters')
     .max(100, 'Full name cannot exceed 100 characters'),
   email: email(),
+  phone: nigerianPhoneSchema,
+  profession: z
+    .string()
+    .trim()
+    .min(2, 'Profession must be at least 2 characters')
+    .max(100, 'Profession cannot exceed 100 characters'),
+  healthcareSpecialty: z.string().trim().max(100).optional(),
   password: z
     .string()
     .min(8, 'Password must be at least 8 characters long')
@@ -43,6 +51,22 @@ export const loginSchema = z.object({
     .min(1, 'Password is required')
     .max(200, 'Password cannot exceed 200 characters'),
 });
+
+export const passwordResetRequestSchema = z.object({ email: email() });
+
+export const passwordResetSchema = z
+  .object({
+    token: z.string().trim().min(32).max(200),
+    password: z
+      .string()
+      .min(8, 'Password must be at least 8 characters long')
+      .max(200, 'Password cannot exceed 200 characters'),
+    confirmPassword: z.string().min(1, 'Please confirm your password'),
+  })
+  .refine((input) => input.password === input.confirmPassword, {
+    message: 'Passwords do not match',
+    path: ['confirmPassword'],
+  });
 
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;

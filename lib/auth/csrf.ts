@@ -8,8 +8,8 @@
  * `docs/implementation-plan.md` §Phase 5 step 4 calls it mandatory rather than
  * belt-and-braces.
  *
- * Browsers send `Origin` on every non-GET request, so its absence on a mutation
- * is itself the anomaly and is treated as a failure.
+ * Browsers normally send `Origin`; when it is absent, `Referer` is the fallback
+ * required by the security policy. Requests without either value fail closed.
  */
 
 import { headers } from 'next/headers';
@@ -23,7 +23,7 @@ export class CsrfError extends Error {
 
 export async function assertSameOrigin(): Promise<void> {
   const requestHeaders = await headers();
-  const origin = requestHeaders.get('origin');
+  const origin = requestHeaders.get('origin') ?? requestHeaders.get('referer');
   const host = requestHeaders.get('host');
 
   if (!origin) {
@@ -33,14 +33,17 @@ export async function assertSameOrigin(): Promise<void> {
     throw new CsrfError('Missing Host header on a state-changing request');
   }
 
-  let originHost: string;
+  let requestOrigin: URL;
   try {
-    originHost = new URL(origin).host;
+    requestOrigin = new URL(origin);
   } catch {
-    throw new CsrfError(`Unparseable Origin header: ${origin}`);
+    throw new CsrfError('Unparseable Origin or Referer header');
   }
 
-  if (originHost !== host) {
-    throw new CsrfError(`Cross-origin request rejected: ${originHost} is not ${host}`);
+  const forwardedProtocol = requestHeaders.get('x-forwarded-proto')?.split(',')[0]?.trim();
+  const expectedProtocol =
+    forwardedProtocol || (process.env.NODE_ENV === 'production' ? 'https' : 'http');
+  if (requestOrigin.host !== host || requestOrigin.protocol !== `${expectedProtocol}:`) {
+    throw new CsrfError('Cross-origin request rejected');
   }
 }

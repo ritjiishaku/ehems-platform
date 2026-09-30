@@ -3,14 +3,21 @@
 import { redirect } from 'next/navigation';
 import { headers } from 'next/headers';
 import { authenticateUser, registerUser, signIn } from '@/lib/auth';
+import { completePasswordReset, requestPasswordReset } from '@/lib/auth/password-reset';
 import { assertSameOrigin, CsrfError } from '@/lib/auth/csrf';
 import {
-  checkRateLimit,
+  clearRateLimit,
+  consumeRateLimit,
   LOGIN_RATE_LIMIT,
-  recordAttempt,
-  resetRateLimit,
+  PASSWORD_RESET_RATE_LIMIT,
 } from '@/lib/auth/rate-limit';
-import { firstIssueMessage, loginSchema, registerSchema } from '@/lib/validation/auth';
+import {
+  firstIssueMessage,
+  loginSchema,
+  passwordResetRequestSchema,
+  passwordResetSchema,
+  registerSchema,
+} from '@/lib/validation/auth';
 
 /**
  * Auth server actions.
@@ -38,6 +45,17 @@ function registerError(message: string): never {
   redirect(`/register?error=${encodeURIComponent(message)}`);
 }
 
+function publicBaseUrl(): string {
+  const configured = process.env.APP_BASE_URL;
+  if (!configured) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('APP_BASE_URL must be configured for password reset links');
+    }
+    return 'http://localhost:3000';
+  }
+  return new URL(configured).origin;
+}
+
 export async function registerAction(formData: FormData) {
   try {
     await assertSameOrigin();
@@ -52,19 +70,31 @@ export async function registerAction(formData: FormData) {
     consentAccepted: formData.get('consentAccepted') === 'true',
     fullName: formData.get('fullName'),
     email: formData.get('email'),
+    phone: formData.get('phone'),
+    profession: formData.get('profession'),
+    healthcareSpecialty: formData.get('healthcareSpecialty') || undefined,
     password: formData.get('password'),
   });
 
   if (!parsed.success) registerError(firstIssueMessage(parsed.error));
 
-  const { fullName, email, password } = parsed.data;
+  const { fullName, email, password, phone, profession, healthcareSpecialty } = parsed.data;
   const requestHeaders = await headers();
   const ipAddress = clientIp(requestHeaders);
   const userAgent = requestHeaders.get('user-agent') ?? undefined;
 
   let user;
   try {
-    user = await registerUser({ name: fullName, email, password, ipAddress, userAgent });
+    user = await registerUser({
+      name: fullName,
+      email,
+      password,
+      phone,
+      profession,
+      healthcareSpecialty,
+      ipAddress,
+      userAgent,
+    });
   } catch (error) {
     registerError(error instanceof Error ? error.message : 'Unable to create account');
   }
@@ -96,7 +126,7 @@ export async function loginAction(formData: FormData) {
   // Keyed on IP *and* address, so rotating IPs does not escape the limit and a
   // shared mobile IP does not lock out everyone behind it.
   const throttleKey = `login:${ipAddress ?? 'unknown'}:${email}`;
-  const verdict = checkRateLimit(throttleKey, LOGIN_RATE_LIMIT);
+  const verdict = await consumeRateLimit(throttleKey, LOGIN_RATE_LIMIT);
   if (!verdict.allowed) {
     const minutes = Math.ceil(verdict.retryAfterSeconds / 60);
     loginError(
@@ -108,11 +138,60 @@ export async function loginAction(formData: FormData) {
   try {
     user = await authenticateUser({ email, password, ipAddress, userAgent });
   } catch (error) {
-    recordAttempt(throttleKey, LOGIN_RATE_LIMIT);
     loginError(error instanceof Error ? error.message : 'Unable to log in');
   }
 
-  resetRateLimit(throttleKey);
+  await clearRateLimit(throttleKey);
   await signIn(user);
   redirect('/dashboard');
+}
+
+export async function requestPasswordResetAction(formData: FormData) {
+  try {
+    await assertSameOrigin();
+  } catch (error) {
+    if (error instanceof CsrfError) redirect('/forgot-password?error=request-failed');
+    throw error;
+  }
+
+  const parsed = passwordResetRequestSchema.safeParse({ email: formData.get('email') });
+  if (!parsed.success) redirect('/forgot-password?error=invalid-email');
+
+  const requestHeaders = await headers();
+  const throttleKey = `password-reset:${clientIp(requestHeaders) ?? 'unknown'}:${parsed.data.email}`;
+  const verdict = await consumeRateLimit(throttleKey, PASSWORD_RESET_RATE_LIMIT);
+  if (verdict.allowed) {
+    try {
+      await requestPasswordReset(parsed.data.email, publicBaseUrl());
+    } catch {
+      // Keep the same response for existing and unknown accounts. Provider or
+      // configuration failures do not reveal account existence to the caller.
+    }
+  }
+
+  redirect('/forgot-password?status=sent');
+}
+
+export async function resetPasswordAction(formData: FormData) {
+  try {
+    await assertSameOrigin();
+  } catch (error) {
+    if (error instanceof CsrfError) redirect('/reset-password?error=invalid-link');
+    throw error;
+  }
+
+  const parsed = passwordResetSchema.safeParse({
+    token: formData.get('token'),
+    password: formData.get('password'),
+    confirmPassword: formData.get('confirmPassword'),
+  });
+  if (!parsed.success) {
+    const tokenValue = formData.get('token');
+    const token = typeof tokenValue === 'string' ? tokenValue : '';
+    redirect(`/reset-password?token=${encodeURIComponent(token)}&error=invalid-input`);
+  }
+
+  const completed = await completePasswordReset(parsed.data.token, parsed.data.password);
+  if (!completed) redirect('/reset-password?error=invalid-link');
+  redirect('/login?status=password-reset');
 }

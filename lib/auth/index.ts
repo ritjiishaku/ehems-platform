@@ -19,12 +19,13 @@
 
 import crypto from 'node:crypto';
 import { cookies } from 'next/headers';
-import bcrypt from 'bcryptjs';
 import { prisma } from '@/lib/db/client';
 import { sendNotification } from '@/lib/notifications';
 import { CONSENT_TEXT, CONSENT_VERSION } from '@/lib/ndpa/consent';
+import { hashPassword, passwordHashNeedsUpgrade, verifyPassword } from './password';
+import { ABSOLUTE_SESSION_MS, sessionExpiryAfterActivity } from './session-policy';
 
-import type { RoleKey } from '@/lib/permissions/roles';
+import { isRoleKey, type RoleKey } from '@/lib/permissions/roles';
 
 export type UserRole = RoleKey; // kept for callers that import this name
 
@@ -32,34 +33,48 @@ export type SessionUser = {
   id: string;
   email: string;
   name: string;
-  /** Code-safe role key, e.g. 'member' | 'admin' | 'superAdmin'. Defaults to 'visitor' when no role is assigned. */
-  role: RoleKey;
+  /** Canonical persisted role key; null means no role and therefore no permissions. */
+  role: RoleKey | null;
 };
 
 const SESSION_COOKIE = 'ehems_session';
-const SESSION_SECRET = process.env.AUTH_SESSION_SECRET ?? 'dev-secret-change-me-in-production';
+const configuredSessionSecret = process.env.AUTH_SESSION_SECRET;
+if (
+  process.env.NODE_ENV === 'production' &&
+  (!configuredSessionSecret || Buffer.byteLength(configuredSessionSecret) < 32)
+) {
+  throw new Error('AUTH_SESSION_SECRET must be set to at least 32 characters in production');
+}
+const SESSION_SECRET = configuredSessionSecret ?? 'local-development-secret-not-for-production';
 
-// Session lifetimes. These must stay in step with the SystemSetting rows seeded
-// in prisma/seed.ts (session_lifetime_member_days, session_absolute_cap_days).
-const MEMBER_SESSION_DAYS = 7;
-const ABSOLUTE_SESSION_DAYS = 30;
-
-// ---------------------------------------------------------------------------
-// Password hashing (bcrypt)
-// ---------------------------------------------------------------------------
-
-async function hashPassword(password: string): Promise<string> {
-  return bcrypt.hash(password, 10);
+function sessionRole(roleName: string | null | undefined): RoleKey | null {
+  return roleName && isRoleKey(roleName) ? roleName : null;
 }
 
-async function verifyPassword(password: string, storedHash: string): Promise<boolean> {
-  if (storedHash.includes(':')) {
-    const [salt, hash] = storedHash.split(':');
-    if (!salt || !hash) return false;
-    const candidate = crypto.pbkdf2Sync(password, salt, 120_000, 64, 'sha512').toString('hex');
-    return crypto.timingSafeEqual(Buffer.from(candidate, 'hex'), Buffer.from(hash, 'hex'));
-  }
-  return bcrypt.compare(password, storedHash);
+// ---------------------------------------------------------------------------
+async function upgradePasswordHash(
+  userId: string,
+  oldHash: string,
+  password: string,
+): Promise<void> {
+  const newHash = await hashPassword(password);
+  await prisma.$transaction(async (tx) => {
+    const updated = await tx.user.updateMany({
+      where: { id: userId, passwordHash: oldHash },
+      data: { passwordHash: newHash },
+    });
+    if (updated.count !== 1) return;
+
+    await tx.auditLog.create({
+      data: {
+        actorId: userId,
+        action: 'USER_PASSWORD_HASH_UPGRADED',
+        entityType: 'User',
+        entityId: userId,
+        metadata: { algorithm: 'argon2id' },
+      },
+    });
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -82,7 +97,10 @@ function decodeCookieValue(cookie: string): { sessionId: string; token: string }
   if (!sessionId || !token || !signature) return null;
 
   const expected = signValue(`${sessionId}.${token}`);
-  if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) return null;
+  const signatureBytes = Buffer.from(signature);
+  const expectedBytes = Buffer.from(expected);
+  if (signatureBytes.length !== expectedBytes.length) return null;
+  if (!crypto.timingSafeEqual(signatureBytes, expectedBytes)) return null;
 
   return { sessionId, token };
 }
@@ -99,6 +117,9 @@ export async function registerUser(input: {
   name: string;
   email: string;
   password: string;
+  phone: string;
+  profession: string;
+  healthcareSpecialty?: string;
   ipAddress?: string;
   userAgent?: string;
 }): Promise<SessionUser> {
@@ -124,6 +145,9 @@ export async function registerUser(input: {
       data: {
         email: normalizedEmail,
         name: trimmedName,
+        phone: input.phone,
+        profession: input.profession.trim(),
+        healthcareSpecialty: input.healthcareSpecialty?.trim() || null,
         passwordHash,
         // Assign the 'member' role by connecting to the seeded Role row.
         roleRef: { connect: { name: 'member' } },
@@ -132,9 +156,29 @@ export async function registerUser(input: {
       include: { roleRef: true },
     });
 
+    const freeTier = await tx.tier.findFirst({
+      where: { name: "O'Free Levels", isFree: true, active: true },
+      orderBy: { displayOrder: 'asc' },
+    });
+    if (!freeTier) {
+      // Registration must not succeed without the D-1 entitlement. Throwing
+      // rolls back the user and consent together rather than creating an account
+      // whose first-login state depends on a later repair job.
+      throw new Error("The O'Free tier is not configured");
+    }
+
+    const freeEnrolment = await tx.enrolment.create({
+      data: {
+        userId: created.id,
+        tierId: freeTier.id,
+        status: 'active',
+      },
+    });
+
     await tx.consentRecord.create({
       data: {
         userId: created.id,
+        consentType: 'data_processing',
         consentVersion: CONSENT_VERSION,
         consentText: CONSENT_TEXT,
         ipAddress: requestContext.ipAddress,
@@ -159,6 +203,16 @@ export async function registerUser(input: {
       },
     });
 
+    await tx.auditLog.create({
+      data: {
+        actorId: created.id,
+        action: 'ENROLMENT_ACTIVATED',
+        entityType: 'Enrolment',
+        entityId: freeEnrolment.id,
+        metadata: { tierId: freeTier.id, trigger: 'registration_d1_exception' },
+      },
+    });
+
     return created;
   });
 
@@ -173,7 +227,7 @@ export async function registerUser(input: {
     id: user.id,
     email: user.email,
     name: user.name,
-    role: (user.roleRef?.name ?? 'visitor') as RoleKey,
+    role: sessionRole(user.roleRef?.name),
   };
 }
 
@@ -201,6 +255,10 @@ export async function authenticateUser(input: {
     throw new Error('Invalid email or password');
   }
 
+  if (passwordHashNeedsUpgrade(user.passwordHash)) {
+    await upgradePasswordHash(user.id, user.passwordHash, input.password);
+  }
+
   await prisma.auditLog.create({
     data: {
       actorId: user.id,
@@ -215,7 +273,7 @@ export async function authenticateUser(input: {
     id: user.id,
     email: user.email,
     name: user.name,
-    role: (user.roleRef?.name ?? 'visitor') as RoleKey,
+    role: sessionRole(user.roleRef?.name),
   };
 }
 
@@ -236,7 +294,10 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
   });
 
   if (!session) return null;
-  if (!crypto.timingSafeEqual(Buffer.from(session.tokenHash), Buffer.from(tokenHash))) return null;
+  const storedTokenHash = Buffer.from(session.tokenHash);
+  const providedTokenHash = Buffer.from(tokenHash);
+  if (storedTokenHash.length !== providedTokenHash.length) return null;
+  if (!crypto.timingSafeEqual(storedTokenHash, providedTokenHash)) return null;
 
   const now = new Date();
   if (session.expiresAt < now || session.absoluteExpiresAt < now) {
@@ -246,11 +307,20 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
 
   if (session.user.deletedAt) return null;
 
+  const activeRole = sessionRole(session.user.roleRef?.name);
+  const renewedExpiry = sessionExpiryAfterActivity(now, activeRole, session.absoluteExpiresAt);
+  if (renewedExpiry.getTime() > session.expiresAt.getTime()) {
+    await prisma.session.update({
+      where: { id: session.id },
+      data: { expiresAt: renewedExpiry },
+    });
+  }
+
   return {
     id: session.user.id,
     email: session.user.email,
     name: session.user.name,
-    role: (session.user.roleRef?.name ?? 'visitor') as RoleKey,
+    role: sessionRole(session.user.roleRef?.name),
   };
 }
 
@@ -274,8 +344,8 @@ export async function signIn(user: SessionUser): Promise<void> {
   const tokenHash = hashToken(token);
 
   const now = new Date();
-  const expiresAt = new Date(now.getTime() + MEMBER_SESSION_DAYS * 24 * 60 * 60 * 1000);
-  const absoluteExpiresAt = new Date(now.getTime() + ABSOLUTE_SESSION_DAYS * 24 * 60 * 60 * 1000);
+  const absoluteExpiresAt = new Date(now.getTime() + ABSOLUTE_SESSION_MS);
+  const expiresAt = sessionExpiryAfterActivity(now, user.role, absoluteExpiresAt);
 
   const session = await prisma.session.create({
     data: { userId: user.id, tokenHash, expiresAt, absoluteExpiresAt },
@@ -286,7 +356,9 @@ export async function signIn(user: SessionUser): Promise<void> {
     sameSite: 'lax',
     secure: process.env.NODE_ENV === 'production',
     path: '/',
-    maxAge: MEMBER_SESSION_DAYS * 24 * 60 * 60,
+    // Keep the browser cookie through the absolute cap; the database expiry
+    // enforces the shorter inactivity window and is checked on every request.
+    maxAge: ABSOLUTE_SESSION_MS / 1000,
   });
 }
 
@@ -302,4 +374,9 @@ export async function signOut(): Promise<void> {
   }
 
   cookieStore.delete(SESSION_COOKIE);
+}
+
+/** Revoke all of a user's sessions after a password or privilege change. */
+export async function invalidateUserSessions(userId: string): Promise<void> {
+  await prisma.session.deleteMany({ where: { userId } });
 }

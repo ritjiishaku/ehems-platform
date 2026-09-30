@@ -12,7 +12,7 @@ import { CONSENT_TEXT } from '@/lib/ndpa/consent';
  */
 export default function RegisterForm({ error }: { error?: string }) {
   return (
-    <main className="bg-background flex h-screen max-h-screen w-full items-center justify-center overflow-hidden px-4 py-4 sm:px-6">
+    <main className="bg-background flex min-h-dvh w-full items-center justify-center overflow-y-auto px-4 py-8 sm:px-6">
       <div className="w-full max-w-md rounded-3xl border border-outline-variant bg-surface-container-lowest p-6 shadow-md sm:p-8">
         <div className="flex items-center justify-between">
           <Link
@@ -66,6 +66,53 @@ export default function RegisterForm({ error }: { error?: string }) {
               className="border-outline bg-surface-container-lowest text-on-surface focus:border-primary focus:ring-primary/20 mt-1 w-full rounded-xl border px-3.5 py-2.5 outline-none transition-all focus:ring-2"
               placeholder="you@example.com"
               required
+            />
+          </div>
+
+          <div>
+            <label htmlFor="phone" className="label-medium text-on-surface block font-medium">
+              Nigerian phone number
+            </label>
+            <input
+              id="phone"
+              name="phone"
+              type="tel"
+              autoComplete="tel"
+              className="border-outline bg-surface-container-lowest text-on-surface focus:border-primary focus:ring-primary/20 mt-1 w-full rounded-xl border px-3.5 py-2.5 outline-none transition-all focus:ring-2"
+              placeholder="08031234567 or +2348031234567"
+              required
+            />
+          </div>
+
+          <div>
+            <label htmlFor="profession" className="label-medium text-on-surface block font-medium">
+              Profession
+            </label>
+            <input
+              id="profession"
+              name="profession"
+              type="text"
+              autoComplete="organization-title"
+              className="border-outline bg-surface-container-lowest text-on-surface focus:border-primary focus:ring-primary/20 mt-1 w-full rounded-xl border px-3.5 py-2.5 outline-none transition-all focus:ring-2"
+              placeholder="Your healthcare profession"
+              required
+            />
+          </div>
+
+          <div>
+            <label
+              htmlFor="healthcareSpecialty"
+              className="label-medium text-on-surface block font-medium"
+            >
+              Healthcare specialty (optional)
+            </label>
+            <input
+              id="healthcareSpecialty"
+              name="healthcareSpecialty"
+              type="text"
+              autoComplete="off"
+              className="border-outline bg-surface-container-lowest text-on-surface focus:border-primary focus:ring-primary/20 mt-1 w-full rounded-xl border px-3.5 py-2.5 outline-none transition-all focus:ring-2"
+              placeholder="Your specialty, if applicable"
             />
           </div>
 

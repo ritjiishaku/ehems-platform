@@ -5,7 +5,7 @@ import { loginAction } from '@/app/(auth)/actions';
  * Login form. Presentational, for the same reason as RegisterForm — see the
  * note there.
  */
-export default function LoginForm({ error }: { error?: string }) {
+export default function LoginForm({ error, status }: { error?: string; status?: string }) {
   return (
     <main className="bg-background flex h-screen max-h-screen w-full items-center justify-center overflow-hidden px-4 py-4 sm:px-6">
       <div className="w-full max-w-md rounded-3xl border border-outline-variant bg-surface-container-lowest p-6 shadow-md sm:p-8">
@@ -33,6 +33,15 @@ export default function LoginForm({ error }: { error?: string }) {
           </p>
         ) : null}
 
+        {status === 'password-reset' ? (
+          <p
+            role="status"
+            className="bg-primary-container text-on-primary-container mt-3 rounded-xl px-3 py-2"
+          >
+            Your password has been reset. Sign in with your new password.
+          </p>
+        ) : null}
+
         <form action={loginAction} className="mt-6 space-y-4">
           <div>
             <label htmlFor="email" className="label-medium text-on-surface block font-medium">
@@ -47,6 +56,15 @@ export default function LoginForm({ error }: { error?: string }) {
               placeholder="you@example.com"
               required
             />
+          </div>
+
+          <div className="text-right">
+            <Link
+              href="/forgot-password"
+              className="text-label-medium text-primary underline-offset-4 hover:underline"
+            >
+              Forgot password?
+            </Link>
           </div>
 
           <div>

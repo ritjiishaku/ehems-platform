@@ -26,15 +26,17 @@ devices over 3G. Optimise for low bandwidth and non-technical users.
 
 ## 2. Tech stack
 
-> **Stack is not fixed by the PRD.** The defaults below are assumed. If you
-> change any of these, update this section first so subsequent agents inherit
-> the decision.
+> The client confirmed this stack on 2026-09-28. The PRD remains technology
+> agnostic; if the stack changes, update this section first so subsequent agents
+> inherit the decision.
 
 - **Framework:** Next.js (App Router) + TypeScript, strict mode
 - **Database:** PostgreSQL
 - **ORM:** Prisma
 - **Styling:** Tailwind CSS
-- **Auth:** session-based, email/password, hashed with bcrypt or argon2
+- **Auth:** session-based, email/password; Argon2id is required by
+  `.agents/rules/security.md`; new hashes use Argon2id and legacy hashes are
+  upgraded after successful login.
 - **Validation:** Zod at every API boundary
 - **Email:** transactional provider behind an abstraction (see §7)
 - **Hosting:** two environments, `staging` and `production`
@@ -57,16 +59,25 @@ npm run check:tokens     # fail if styles/tokens.css is stale
 npm run db:generate       # prisma generate  (required after `npm ci`; the client is not committed)
 npm run db:migrate        # prisma migrate dev   — create + apply a migration
 npm run db:deploy         # prisma migrate deploy — apply migrations only, no shadow DB
-npm run db:seed           # Phase 2A data: community links, retention, settings
+npm run db:seed           # roles, tiers, certificates, links, retention, settings
 npm run db:studio         # prisma studio
 ```
 
 Never commit with failing `typecheck`, `lint`, or `test`.
+**What exists today:** the token pipeline and tooling gates; public marketing
+pages; database-backed registration, login, password reset, profile, consent,
+and data-subject request intake; Argon2id password hashing with legacy-hash
+upgrades; pricing calculations; a manual payment workflow (member proof upload
+with encrypted storage, admin verification queue, verified-only activation) and
+its admin/member screens; manual attendance marking per programme session with
+percentage recomputation; and manual completion review that gates every BR-008
+condition before an admin marks an enrolment completed. A Prisma schema/migration
+history contains the Phase 2A and decision-dependent programme, enrolment,
+material, role, tier, and certificate models. The seed targets the five approved
+roles; the certificate catalogue remains incomplete, and existing databases may
+retain legacy role rows. There is no payment gateway and no certificate issuance
+workflow yet.
 
-**What exists today** is the token pipeline, the tooling gates, the landing page
-at `/`, the Phase 2A schema with a real migration history, and session auth. There
-is no payment code, and `db:seed` seeds only Phase 2A data — tiers, certificates
-and roles stay unseeded until D-3 and D-5 are answered.
 
 Three traps worth knowing before you touch the gates or the database:
 
@@ -82,6 +93,12 @@ Three traps worth knowing before you touch the gates or the database:
 - **Never run Prettier over `styles/tokens.css`.** It is compared
   byte-for-byte by `check:tokens`; reformatting it makes `verify` permanently
   red. `.prettierignore` excludes it.
+- **`fs` calls on a runtime-computed path need a `turbopackIgnore` comment on a
+  bare variable.** `lib/payments/proofs.ts` reads and writes encrypted receipts
+  by a path it cannot know at build time, and without the annotation Turbopack
+  traces the whole project into the server output — every source file and
+  `public/`. The annotation must sit on the bare argument to the fs function;
+  putting it inside a `path.join(...)` is silently ignored (vercel/next.js#95125).
 - **Playwright always builds first.** It runs `next build && next start`, because
   dev serves unminified bundles (~852 KB vs ~188 KB) and any bandwidth assertion
   taken against dev is meaningless.
@@ -112,12 +129,17 @@ not a design preference. Each maps to a rule ID in the PRD (§10).
 
 | Tier                 | Price ₦   | Discounted ₦ | Mentorship | Certs |
 | -------------------- | --------- | ------------ | ---------- | ----- |
-| O'Free Levels        | 0         | —            | —          | —     |
-| Basic Level          | 300,000   | —            | 1 month    | 6     |
-| Basic Level III      | 550,000   | —            | 1 month    | 10    |
-| Advanced Level IV    | 750,000   | 375,000      | 2 months   | 15    |
-| Advanced Level V     | 900,000   | 450,000      | 3 months   | 20    |
-| Higher Advanced VIII | 1,250,000 | 625,000      | 6 months   | 25+   |
+| O'Free Levels        | 0         | —            | —          | See approved catalogue |
+| Basic Level          | 300,000   | —            | 1 month    | See approved catalogue |
+| Basic Level III      | 550,000   | —            | 1 month    | See approved catalogue |
+| Advanced Level IV    | 750,000   | 375,000      | 2 months   | See approved catalogue |
+| Advanced Level V     | 900,000   | 450,000      | 3 months   | See approved catalogue |
+| Higher Advanced VIII | 1,250,000 | 625,000      | 6 months   | See approved catalogue |
+
+The client confirmed a total catalogue of 27 certificates (D-5), but the PRD
+enumeration and current seed contain 26 names. Do not publish per-tier counts or
+claim a complete catalogue until the client supplies the missing name and
+confirms its tier mapping.
 
 - **Tiers II, VI, and VII are retired/internal. Never display them anywhere —
   not in the UI, not in comparisons, not in seed data exposed to members.** (BR-016)
@@ -147,9 +169,15 @@ not a design preference. Each maps to a rule ID in the PRD (§10).
 
 ### Roles
 
-`Visitor`, `Customer`, `Member (Mentee)`, `Mentor`, `Programme Participant`,
-`Event Participant`, `Internship Applicant` (Phase 2), `Show Viewer`,
-`Admin`, `Super Admin`, `Staff / Content Manager`.
+The client confirmed five assignable RBAC roles: `Visitor`, `Member (Mentee)`,
+`Mentor`, `Admin`, and `Super Admin` (D-3). Other PRD role concepts —
+`Customer`, `Programme Participant`, `Event Participant`, `Internship Applicant`
+(Phase 2), `Show Viewer`, and `Staff / Content Manager` — are derived from
+account or domain state, not independently assignable roles. The code and seed
+now expose only these five role keys. Existing databases may still contain
+legacy rows for derived concepts; authorization rejects keys outside the
+approved catalogue. D-12 records hardcoded permission checks for these five
+roles as the Phase 1 technical approach; no `RolePermission` table is planned.
 
 Enforce least privilege. Admin cannot configure tiers or manage roles —
 that is Super Admin only (see PRD §4.2 permission matrix).
@@ -159,8 +187,12 @@ that is Super Admin only (see PRD §4.2 permission matrix).
 ## 4. Payment ↔ enrolment separation
 
 **Architecturally critical.** Payment records and enrolment records are
-separate entities. An enrolment's status changes to `active` **only** when its
+separate entities. A paid-tier enrolment becomes `active` **only** when its
 linked payment reaches `Verified`.
+
+**Confirmed exception:** a zero-cost O'Free enrolment may become active on
+creation without a payment (D-1). This exception applies only to zero-cost
+tiers; paid-tier activation still requires a linked Verified payment.
 
 ```
 Pending → Submitted → Under Review → Verified | Rejected
@@ -201,7 +233,7 @@ Attendance percentage is derived, not stored as truth — recompute from
 ```
 app/
   (public)/          # marketing site — no auth
-  (auth)/            # login, register, verify, reset
+  (auth)/            # login, register, password reset; email verification omitted (CR-06)
   (member)/dashboard/# authenticated member area
   (admin)/admin/     # role-gated admin area
   api/               # route handlers, one folder per resource group
@@ -220,7 +252,7 @@ lib/
   http/              # response envelope, error → HTTP status mapping
 prisma/
   schema.prisma
-  seed.ts            # seeds tiers, cert catalogue, all 11 roles, settings, retention
+  seed.ts            # current seed has legacy 11-role data; align to 5 assignable roles
 tokens.json          # design token source — the only hand-edited token file
 styles/tokens.css    # GENERATED from tokens.json — never hand-edit
 styles/type.css      # MD3 type-role utilities, bound to the emitted type tokens
@@ -312,12 +344,14 @@ consent type, a retention policy, or an audit entry before you call it done.
 
 ### In scope (Phase 1)
 
-Public site (Home, About, Programmes, Products, Events, Pricing, FAQ, Contact),
+Public site (Home, About, Programmes, Products, event list, Pricing, FAQ, Contact),
 signup → brochure/FAQ unlock → WhatsApp Probation Room link, tier catalogue
 with upgrade pricing, manual payment + verification, member dashboard,
 programme/session CMS, manual attendance, completion checklist, manual
-certificate issuance, product orders (physical + digital), community link
-management, feedback forms, RBAC, NDPA schema, email notifications.
+certificate issuance, product orders (physical + digital; community access as a
+separate entitlement), community link
+management, feedback forms, RBAC, NDPA schema, email notifications, and
+admin-managed event content without ticketing or capacity management.
 
 ### Out of scope — do not build, do not stub "just in case"
 
@@ -325,7 +359,7 @@ Payment gateway (Paystack/Flutterwave), QR attendance, automated assignment
 scoring, certificate auto-generation, internship module, mentor dashboards,
 feedback analytics, Telegram bot, event ticketing with capacity management,
 in-app chat/forum, mobile app/PWA, multi-language, affiliate/referral,
-advanced analytics, member marketplace.
+advanced analytics, vouchers, member marketplace.
 
 If a task seems to require one of these, stop and surface it as a change
 request rather than building a partial version.

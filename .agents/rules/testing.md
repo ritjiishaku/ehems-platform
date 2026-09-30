@@ -104,8 +104,9 @@ Every one of these must have a test that fails if the rule is broken:
 - **Completion requires all five conditions.** BR-008. A member with 59%
   attendance is not complete. A member with 61% but an unfinished
   checklist is not complete.
-- **Payment and enrolment are separate.** FR-029. Verifying a payment
-  activates an enrolment; failing to verify does not.
+- **Payment and enrolment are separate.** FR-029. Verifying a paid-tier payment
+  activates its linked enrolment; a pending/rejected payment does not. Test the
+  D-1 zero-cost O'Free activation exception separately.
 - **Audit log rejects UPDATE and DELETE.** At the database level. SEC-015.
 - **Consent is captured at registration** with version, text, IP, UA.
   SEC-011.
@@ -180,10 +181,14 @@ the seed gets its own test:
 - Six tiers exist, with correct `displayOrder` and kobo prices, named exactly
   as PRD §11.1 (including "Level").
 - Tiers II, VI, VII do not exist.
-- The certificate catalogue matches PRD §11.3.
-- All **eleven** roles from PRD §4.1 exist, each with its permissions. Seeding
-  four (as PRD §5.1 implies) makes Staff/Content Manager, Show Viewer,
-  Programme Participant, and Event Participant unrepresentable.
+- The approved certificate total is 27, but the PRD and current seed enumerate
+  26 names. Keep certificate-completeness tests blocked until the client supplies
+  the missing name and tier mapping; do not invent a fixture row.
+- The approved RBAC seed contains the five assignable roles confirmed in D-3:
+  Visitor, Member, Mentor, Admin, Super Admin. Existing databases may retain
+  legacy role rows; authorization must reject them.
+- Permission checks are hardcoded for the five assignable roles (D-12); do not
+  expect a `RolePermission` table in Phase 1.
 - `SystemSetting` and a `RetentionPolicy` per personal-data category exist.
 
 ### Isolation

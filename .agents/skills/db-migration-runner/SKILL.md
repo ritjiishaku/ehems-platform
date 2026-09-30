@@ -23,30 +23,31 @@ description: Create and run a Prisma migration for EHEMS. Use when changing the 
 
 ## Workflow
 
-Prisma is not installed in this repository yet. These commands become real
-when the app is scaffolded; do not claim a migration ran until they do.
+Prisma is installed and the repository uses npm. For a local development
+database, follow this sequence; do not apply migrations to staging or production
+from an agent session.
 
 ```bash
 # 1. Edit prisma/schema.prisma
-# 2. Generate migration
-npx prisma migrate dev --name add_consent_record
+# 2. Generate and apply the local development migration
+npm run db:migrate -- --name add_consent_record
 
 # 3. Inspect the generated SQL before committing
 #    prisma/migrations/<timestamp>_<name>/migration.sql
 
 # 4. Regenerate the client
-npx prisma generate
+npm run db:generate
 
 # 5. Update the seed if the change affects tiers, certificates, roles,
 #    permissions, system settings, or retention policies
-npx prisma db seed
+npm run db:seed
 
 # 6. Verify
 npm run verify
 ```
 
-The repo is **npm**, not pnpm, and has no lockfile. Use `npx` to reach local
-binaries.
+The repo is **npm**. Use the package scripts so the project Prisma/seed
+configuration is applied consistently.
 
 Never use `prisma db push` outside throwaway local work. Migrations are
 the source of truth.
@@ -199,12 +200,13 @@ GRANT SELECT, INSERT ON "AuditLog" TO <app_role>;
 - The six tiers from PRD §11.1, named exactly as written there (including
   "Level"), with correct `display_order` and prices in kobo.
 - **Not** Tiers II, VI, VII. They are retired (BR-016).
-- The certificate catalogue from PRD §11.3.
-- **All eleven roles** from PRD §4.1, each with its permissions. PRD §5.1
-  implies four; four is wrong — seeding only four makes Staff/Content
-  Manager, Show Viewer, Programme Participant, and Event Participant
-  unrepresentable, and every `requireRole` check is then evaluated against an
-  incomplete table.
+- The approved certificate catalogue. D-5 confirms 27 total, but the PRD and
+  current seed enumerate 26 names; do not add an invented row before the client
+  supplies the missing name and tier mapping.
+- The **five assignable roles** confirmed in D-3: Visitor, Member, Mentor,
+  Admin, and Super Admin. Other PRD role concepts are derived from account or
+  domain state. D-12 records hardcoded permission checks for these five roles;
+  no Phase 1 `RolePermission` table is used.
 - `SystemSetting` rows.
 - A `RetentionPolicy` row for every personal-data category (SEC-016).
 

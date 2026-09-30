@@ -97,17 +97,24 @@ await requireRole(session, ["admin"]); // 403 if wrong role
 await requireOwnership(session, resource); // 403 if not the owner
 ```
 
-**All eleven roles** from PRD §4.1 exist: `visitor`, `customer`, `member`,
-`mentor`, `programme_participant`, `event_participant`,
-`internship_applicant`, `show_viewer`, `admin`, `super_admin`, `staff`. Do
-not assume a shorter list.
+**Five assignable roles only** (D-3, confirmed by the client 2026-09-28):
+`visitor`, `member`, `mentor`, `admin`, `super_admin`. Everything else in PRD
+§4.1 — `customer`, `programme_participant`, `event_participant`,
+`internship_applicant`, `show_viewer`, `staff` — is *derived* from account or
+domain state, not an independently assignable role, so it is not a `Role` row
+and not something a route checks for. `isRoleKey` rejects keys outside the
+catalogue, which is what stops a legacy row from granting anything.
 
 **Super Admin only:** tier configuration, role assignment, **mentor
 promotion**, and permission changes. Mentor promotion is the one role change
 that creates platform-wide capability and is easy to forget.
 
 Check **permissions**, not only roles, where the PRD §4.2 matrix is
-finer-grained than the role — use `lib/permissions/`.
+finer-grained than the role — use `lib/permissions/`. Prefer
+`hasPermission(principal, key)` over `requireRole(...)` whenever §4.2 has a row
+for the action, so the matrix stays the single authority. A direct `requireRole`
+is only correct when §4.2 defines *no* row (see D-18 for the data-subject
+requests case, which is the current example).
 
 ## Validation
 
@@ -140,16 +147,15 @@ All payment routes delegate to `lib/payments/transitions`. Never touch
 `Payment.status` directly.
 
 - **Member submits proof** → `submitProof()`. Requires ownership of the
-  payment. Moves `pending | rejected` → `submitted`. The prior
-  `rejection_reason` is not cleared.
-- **Admin opens for review** → `openForReview()`. Requires `admin` or
-  `super_admin`. Sets `under_review`, records `opened_by`.
-- **Admin approves** → `verifyPayment()`. Requires `admin` or
-  `super_admin`. Sets `verified` and calls `activateEnrolment()` in the same
-  transaction.
+  payment. Moves `pending` → `submitted`.
+- **Admin opens for review** → `openForReview()`. Requires the §4.2
+  `payment.verify` grant. Sets `under_review`, records `opened_by`.
+- **Admin approves** → `verifyPayment()`. Requires the `payment.verify` grant.
+  Sets `verified` and calls `activateEnrolment()` in the same transaction.
 - **Admin rejects** → `rejectPayment()`. Requires a reason. Sets `rejected`.
 - **Member resubmits** → `resubmitProof()`. Requires ownership. Moves
-  `rejected` → `submitted` on the same row.
+  `rejected` → `submitted` on the **same row**, keeping `rejection_reason`
+  until the payment is eventually verified (D-8). Never a second `Payment`.
 
 The client sends `paymentId` and proof details. **Never accept an amount
 from the client.** The amount is fixed at creation from `lib/pricing/`.

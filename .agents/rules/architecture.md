@@ -14,12 +14,11 @@ description: Layering, directory layout, the manual payment state machine, activ
 - Zod at every boundary
 - Session-based auth, email/password, argon2id
 
-**The stack is an assumption, not a PRD requirement** (`AGENTS.md` §2). It is
-recorded in `AGENTS.md` §2, and that section is the single place to change it —
-update `AGENTS.md` §2 first so subsequent agents inherit the decision, then
-this file if the layering is affected. Narrowing "bcrypt or argon2" to
-argon2id is a decision recorded here; if it is revisited, note it in
-`AGENTS.md` §2 too.
+**The client confirmed the application stack on 2026-09-28.** The PRD remains
+technology agnostic; `AGENTS.md` §2 is the authoritative project stack record.
+Update it first if the stack changes, then this file if the layering is
+affected. Password hashing remains governed by the security rules; the stack
+confirmation did not select a hash algorithm.
 
 ## Layering
 
@@ -120,8 +119,10 @@ codebase.
 
 ### The single activation point
 
-`Enrolment.status` becomes `active` when, and only when, a linked `Payment`
-reaches `verified`. One function:
+For paid tiers, `Enrolment.status` becomes `active` only when a linked `Payment`
+reaches `verified`. A zero-cost O'Free enrolment may activate on creation
+without a payment (D-1); this exception must be guarded to zero-cost tiers.
+Paid activation uses one function:
 
 ```ts
 // lib/payments/activateEnrolment.ts
@@ -132,14 +133,12 @@ export async function activateEnrolment(tx, paymentId) {
 }
 ```
 
-Phase 2 will add a second caller (the gateway webhook). Keep this function
-as the single trigger so that arrives as an addition, not a rewrite.
+Do not add a payment-gateway caller or gateway-specific scaffolding in Phase 1.
+Any future gateway integration requires the later-phase scope approval; if
+approved, it must use this same activation function.
 
-**Open question — O'Free.** O'Free is ₦0, so no `Payment` exists, so nothing
-ever calls `activateEnrolment`. AC-001 requires O'Free access at signup. This
-contradiction is unresolved and is logged in [docs/decisions.md](../../docs/decisions.md);
-do not paper over it by auto-verifying a zero-amount payment without a
-decision.
+**O'Free decision (D-1):** confirmed exception. Activate the zero-cost
+enrolment on creation; do not create or auto-verify a zero-amount payment.
 
 ### Amounts
 
@@ -222,11 +221,10 @@ amount actually paid (BR-003).
   `certificate_eligible`, `withdrawn_at`, `verification_id`). Prisma models
   are camelCase and map explicitly with `@map` / `@@map` — Prisma does not do
   this conversion for you.
-- **Unresolved:** PRD §16.2 gives `Enrolment` a singular `programme_id`, but
-  §16.7 declares `Programme → ProgrammeTiers → Tier` as many-to-many. One
-  enrolment cannot span N programmes, and one payment cannot activate N
-  enrolments. See [docs/decisions.md](../../docs/decisions.md). Do not build
-  programme access on `Enrolment` rows until this is settled.
+- **Resolved (D-4):** `EnrolmentProgramme` is the many-to-many join between
+  enrolments and programmes, with a per-programme attendance threshold snapshot.
+  This model is present in the current schema. Do not reintroduce a singular
+  `Enrolment.programme_id`.
 
 ## Community links are data
 

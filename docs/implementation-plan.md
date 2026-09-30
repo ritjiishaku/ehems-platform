@@ -1,19 +1,21 @@
 # EHEMS Phase 1 — Implementation Plan
 
-**Status:** Foundation slice **implemented and verified**. Next.js 16 (App
-Router) + TypeScript strict + Tailwind v4 + Prisma is scaffolded; the MD3
-typography tokens, the design-token pipeline, and the public marketing site are
-live. Phase 2A schema, database session auth, and the Phase 4 notification
-abstraction are also built. Payments, pricing, certificates, RBAC, and the admin
-panel are still plan only. See §What has been built below.
+**Status:** Phase 0 client decision review completed on 2026-09-28. The current
+stack is confirmed. One catalogue input remains unresolved (the approved 27th
+certificate name); hosting provider/domain/region, final content/assets, and the
+legal retention schedule remain production gates. Those items do not block
+unrelated non-production implementation. The repository contains a foundation
+slice, pricing engine, partial auth, schema/migration history, and notification
+abstraction; payment processing and the operational admin/member workflows are
+not implemented. See §What has been built below.
 
 **Authority order:** `EHEMS PRD.md` → `AGENTS.md` → `.agents/rules/*` → this plan.
 Where this plan and a rule disagree, the rule wins and this file is wrong.
 Where a rule and the PRD disagree, the PRD wins and the rule gets fixed.
 
-**Companion documents:** `AGENTS.md` (operating rules), `docs/decisions.md`
-(17 open contradictions, 8 of them blocking), `.agents/rules/design-system.md`
-(token contract).
+**Companion documents:** `AGENTS.md` (confirmed project rules),
+`docs/decisions.md` (decision register and remaining inputs),
+`.agents/rules/design-system.md` (token contract).
 
 ---
 
@@ -26,13 +28,18 @@ Where a rule and the PRD disagree, the PRD wins and the rule gets fixed.
 | Tooling gates: `typecheck`, `lint`, `format:check`, `test`, `test:app`, `test:e2e`, `verify` | live, all green |
 | GitHub Actions (`.github/workflows/ci.yml`) | live — `verify`, `schema`, `database`, `e2e` |
 | Public marketing site (Home, About, Programmes, Pricing, FAQ, Contact) | live, light-only, a11y + reflow + weight tested |
-| Prisma schema, Phase 2A unblocked entities (16 models) | live, migration `20260928095718_init` applied and verified |
+| Prisma schema and migration history | includes Phase 2A/2B models plus Phase 1 profile, typed consent, reset-token, and shared rate-limit fields; Phase 1 migration applied locally |
 | `AuditLog` append-only protections (SEC-015) | live — `BEFORE UPDATE`/`DELETE`/`TRUNCATE` triggers, verified against a live Postgres |
-| Postgres session auth (`lib/auth/`), login + register, auth pages | live |
-| `lib/auth/rbac`, `lib/auth/csrf`, `lib/auth/rate-limit` | live |
+| Postgres session auth (`lib/auth/`), login/register/reset, profile, consent, DSR intake | present; production email delivery remains |
+| `lib/auth/rbac`, canonical five-role permissions, CSRF, shared rate limiting | implemented; sensitive-operation re-auth applies as admin actions arrive |
 | Notification abstraction (`lib/notifications/`) | live, console provider only |
-| Pricing engine (`lib/pricing/`) | live — engine complete, display **blocked** (D-1, D-2) |
-| Payments, certificates, admin panel, RBAC matrix, materials | **not started** |
+| Pricing engine (`lib/pricing/`) | live; D-1/D-2 decisions resolved; catalogue source/display alignment remains |
+| Payment workflow, payment verification, admin UI | implemented; E2E covered |
+| Manual attendance | implemented; completion percentage recomputation and admin session marking covered |
+| Manual completion review | implemented; all five BR-008 conditions gated, admin action only |
+| Certificate issuance | **not implemented** — blocked on the 27th certificate name (D-5) |
+| Role model | code/seed target the five confirmed roles; existing databases may retain historical rows that authorization rejects |
+| Certificate catalogue | approved total 27; current PRD enumeration and seed each contain 26 names; missing name blocks catalogue completion |
 
 The `prisma/` schema now has a real migration history, applied and verified against
 a live Postgres, and the `AuditLog` append-only protections (Phase 1 step 9) are
@@ -49,19 +56,19 @@ in place. Two things about them are worth knowing before the next schema change:
   and is a superuser, and both bypass privilege checks, so TRUNCATE still
   succeeded. The trigger refuses it for every role.
 
-The pricing engine (Phase 7) is live, and a few things about it are worth
-knowing before the next schema change:
+The pricing engine is live, and a few things about it are worth knowing before
+the next schema change:
 
-- **The tier catalogue is the single source of truth, and it is code, not
-  seed data.** `lib/pricing/tiers.ts` is the only place tier names, prices, and
-  display order are written. The landing page and the pricing page both read
-  from it rather than keeping their own arrays, so the two can no longer drift.
+- **Tier authority must move to the database for runtime configuration.** The
+  PRD gives Super Admins tier-configuration capability. `lib/pricing/tiers.ts`
+  and `prisma/seed.ts` currently duplicate catalogue data; Phase 2 must make the
+  database authoritative and pass validated tier data into pure pricing maths.
 - **BR-016 is enforced by the type system, not by a filter.** Tiers II, VI and
   VII are absent from the `TierId` union, so no comparison function can be
   handed a retired tier. The test asserting their absence is a second line of
   defence, not the mechanism.
-- **The engine renders nothing.** No naira figure reaches the DOM while D-2 is
-  open, so a visitor is never shown a discount they will not be charged.
+- **D-2 is resolved.** Public pages may show list prices; eligible members may
+  see their discounted price. The UI and tests must reflect that distinction.
 - **Two lint rules hold the line, and both were proven with throwaway probe
   files rather than assumed.** `ehems/no-float-money` rejects a non-integer
   numeric literal in `lib/pricing/`, which the `Kobo` brand cannot catch, and a
@@ -74,14 +81,12 @@ knowing before the next schema change:
 Three things deliberately absent from the landing page, each for a recorded
 reason rather than oversight:
 
-- **No naira figures.** D-2 — the discounted prices are unmodelled, and showing a
-  discount to a visitor who will be charged full list price is a
-  consumer-protection problem. Pinned by a test.
-- **No per-tier certificate counts.** D-5 — the counts do not reconcile. Pinned
-  by a test.
-- **No WhatsApp link.** D-17 — Probation Room ordering is unanswered, and a
-  community link is data, not a hardcoded URL. See the D-17 entry in
-  `docs/decisions.md` for the CTA decision and the deviation it records.
+- **Current landing page has no naira figures.** D-2 now permits list prices on
+  public pages; pricing UI and tests remain to be aligned with that decision.
+- **No per-tier certificate counts.** D-5 — the catalogue is missing its 27th
+  name and tier mapping; do not make completeness claims until supplied.
+- **No hardcoded WhatsApp link.** D-17 confirms the Probation Room follows
+  signup; its URL remains community-link data and must be supplied/configured.
 
 The 100vh requirement is implemented as `min-h-dvh` on the hero with the rest of
 the page below the fold, not as a hard 100vh lock — a locked height clips content
@@ -141,29 +146,34 @@ Vitest. Do **not** unify them; migrating the token suite would break
 
 ---
 
-## 1. Blocking decisions — needed before the affected work
+## 1. Phase 0 decision status and remaining gates
 
-Eight of the seventeen items in `docs/decisions.md` block construction. The
-schema in particular cannot be finalised without them.
+The client confirmed the stack and the Phase 0 choices recorded in
+`docs/decisions.md` on 2026-09-28. D-1, D-2, D-3, D-4, D-6, D-8 through D-14,
+and D-17 now have recorded decisions. D-5 has an approved total of 27, but the
+27th name and its tier mapping are outstanding; certificate-catalogue
+completion is blocked until supplied.
 
-| ID | Blocks | Why it blocks |
+The following are production/release inputs, not blockers to unrelated local
+implementation:
+
+- Managed hosting is selected; provider, domain/DNS owner, and region remain
+  pending.
+- Final brand/content assets are required before launch and have not yet been
+  delivered.
+- A legal-approved retention schedule and legal review are required before
+  production personal data is processed.
+
+| Item | Status | Blocks |
 | --- | --- | --- |
-| D-3 | Phase 2B, 6 | Roles table cannot be seeded; `Staff / Content Manager` is unrepresentable at four roles |
-| D-12 | Phase 2B, 6 | `RolePermission` is absent from PRD §16 but §4.2 requires per-permission checks |
-| D-4 | Phase 2B, 8–11 | `Enrolment.programme_id` is singular while programmes are many-to-many over tiers — the spine of member state |
-| D-5 | Phase 2B, 11 | "30+", 27, and 76+ certificate counts cannot all seed; seed is a client-facing contract |
-| D-1 | Phase 7 display, 8–9 | ₦0 tier with no payment can never reach `Verified`, so O'Free can never activate |
-| D-2 | Phase 7 display, 3 pricing page | Discounted prices are unmodelled and shown unconditionally; who qualifies is undefined |
-| D-8 | Phase 8 | `Rejected` has no exit, so a rejected member can never resubmit |
-| D-6 | Phase 9 materials | No `Material` entity exists to gate |
-
-Also needed before Phase 1: confirmation of the stack in `AGENTS.md` §2, which
-is explicitly recorded there as an assumption rather than a PRD requirement.
-And the NFR-008 re-authentication window, which NFR-010 requires to be
-measurable (D-14).
-
-Non-blocking items (D-7, D-9, D-10, D-11, D-13, D-15, D-16, D-17) are marked
-as build-around; each affected phase below names how.
+| Five assignable roles | client-confirmed; implementation must align code/seed | RBAC/admin implementation until aligned |
+| Hardcoded permission checks; no `RolePermission` table | recorded technical choice (D-12) | no client blocker; implement unless approach is changed |
+| D-5: 27 certificates | total confirmed; 27th name/tier pending | certificate catalogue, issuance, complete claims |
+| Events | admin content CRUD + public list; no ticketing/capacity | no decision blocker |
+| Products | physical/digital enum; community access separate entitlement | no decision blocker |
+| Email verification | omitted from Phase 1 | no decision blocker |
+| Hosting/domain/region | managed hosting selected; details pending | production deployment |
+| Retention/legal schedule | legal schedule required before production processing | production data processing |
 
 ---
 
@@ -171,60 +181,69 @@ as build-around; each affected phase below names how.
 
 | Phase | Scope | Status |
 | --- | --- | --- |
-| 0 | Decisions and stack confirmation | **waiting on client** |
+| 0 | Decisions and stack confirmation | **client decisions recorded**; D-5 name and production inputs remain tracked gates |
 | 1 | Foundation, token pipeline wiring, test tooling | **live** |
-| 2A | Domain model — unblocked entities | **live** — 16 models, migration applied |
-| 2B | Domain model — roles, enrolment, certificates | **blocked** (D-3, D-4, D-5, D-12) |
+| 2A/2B | Domain model — roles, tiers, enrolment, materials, certificates | schema/migrations present; catalogue remains incomplete and legacy database role rows may remain |
 | 3 | Public marketing site | **live** |
 | 4 | Notification abstraction | **live** — console provider only |
-| 5 | Auth, sessions, consent capture | **live** |
-| 6 | RBAC and permissions | **blocked** (D-3, D-12) |
-| 7 | Pricing engine | **engine live**; display **blocked** (D-1, D-2) |
-| 8 | Payments and manual verification | **blocked** (D-1, D-4, D-8) |
-| 9 | Member dashboard | **blocked** (D-1, D-4, D-6) |
-| 10 | Programme and session CMS | **blocked** (D-4) |
-| 11 | Attendance, completion, certificates | **blocked** (D-4, D-5) |
+| 5 | Auth, sessions, consent capture | **implemented baseline** — production email delivery remains |
+| 6 | RBAC and permissions | **five-role code/seed aligned**; admin DSR queue implemented behind a direct role check (D-18), other admin areas remain |
+| 7 | Pricing engine | **engine live**; D-1/D-2 resolved; display/catalogue alignment remains |
+| 8 | Payments and manual verification | **not started**; decision blockers resolved |
+| 9 | Member dashboard | **not started**; decision blockers resolved |
+| 10 | Programme and session CMS | **schema present; CMS not started** |
+| 11 | Attendance, completion, certificates | **attendance/completion not started; certificate catalogue blocked on 27th name** |
 | 12 | Orders, feedback, community links | **after 6** |
 | 13 | NDPA operations | **after 5** |
 | 14 | Hardening and definition-of-done | last |
 
-Phases 1, 3, 4 and 5 are the critical path to having anything demonstrable, and
-none of them wait on a client decision. That is deliberate: the point of
-starting there is that the decisions get asked with real code on screen instead
-of in the abstract.
+The implementation sequence below remains the delivery plan. A missing
+certificate name blocks catalogue completion only; hosting, legal retention,
+and final content inputs gate production readiness rather than local feature
+work.
 
 ---
 
 ## 3. Phases
 
-### Phase 0 — Unblock
+### Phase 0 — Decisions and architecture baseline
 
-**Goal:** convert the eight blocking decisions and the stack assumption into
-decisions.
+**Status:** Client decision review and documentation reconciliation completed
+on 2026-09-28. The certificate catalogue input remains blocked
+on the client-supplied 27th name; provider/domain/region, final assets, and the
+legal retention schedule remain production gates.
 
-**Work:** walk `docs/decisions.md` with the client in dependency order — D-3 and
-D-12 first because they shape the schema, then D-4, then D-1/D-2, then D-8,
-D-5, D-6. Each entry already carries a recommendation and its impact. Record
-answers by editing the decision's `Decision:` line, not by rewriting the PRD.
-Confirm the `AGENTS.md` §2 stack or replace that section first, then
-`.agents/rules/architecture.md` §Stack if the layering changes.
+**Goal:** establish a consistent approved baseline without silently resolving
+PRD conflicts or inventing client data.
 
-**Gate:** every `BLOCKING` row in §1 above is answered and dated.
+**Work:** record the client-approved stack and decisions in
+`docs/decisions.md`; align `AGENTS.md` and `.agents/rules/`; update this plan to
+reflect implemented schema versus unimplemented workflows. Preserve the PRD as
+source evidence. Track the missing certificate name and launch inputs as
+explicit blockers for their dependent work.
+
+**Gate:** role, product, event, payment-resubmission, pricing, and funnel
+choices are recorded; the only unresolved catalogue input is the 27th
+certificate name. Non-production Phase 1 work may proceed. Certificate
+catalogue completion and production launch remain gated as stated above.
 
 **Governing:** `AGENTS.md` §11 (ask before assuming; never silently expand
 scope).
 
 ---
 
-### Phase 1 — Foundation
+### Phase 1 — Foundation hardening and identity completion
+
+**Status:** App scaffold, token pipeline, public site, login/register/reset,
+profile/consent controls, role authorization, and test gates exist. Production
+email delivery and NDPA request intake remain; do not re-scaffold the foundation.
 
 **Goal:** a running app that renders token-driven UI and passes a full
 lint/typecheck/test gate.
 
 **Work:**
 
-1. Scaffold Next.js App Router with TypeScript `strict: true`, and pin the
-   choice made in Phase 0.
+1. Keep the confirmed Next.js App Router + strict TypeScript stack.
 2. Wire the token pipeline into the build. Map the role variables into the
    Tailwind theme so `bg-primary` resolves to `var(--color-primary)`, and
    configure the dark variant to match **both** dark scopes in
@@ -267,7 +286,10 @@ only and passes `vitest-axe`; Playwright runs the 375px viewport.
 
 ---
 
-### Phase 2A — Domain model, unblocked entities
+### Phase 2A — Domain model baseline
+
+**Status:** Core schema/migrations already exist; add only approved deltas, not
+a duplicate initial schema.
 
 **Goal:** the schema for everything that does not depend on an open decision.
 
@@ -301,32 +323,30 @@ tiers load in `display_order` with tiers II/VI/VII absent, and a test proving
 
 ---
 
-### Phase 2B — Domain model, decision-dependent
+### Phase 2B — Decision-dependent domain model alignment
 
-**Goal:** finish the schema once the client has answered.
+**Status:** The schema and migration history already include the approved
+role, tier, enrolment/programme, material, attendance, and certificate models.
+This is alignment work, not a new schema design phase.
 
-**Blocked on D-3, D-4, D-5, D-12.**
+**Work:** role code/seed now target the five confirmed assignable roles; retain
+role checks without a `RolePermission` table; use the confirmed
+`EnrolmentProgramme` join with snapshotted attendance thresholds; reconcile
+seed/catalogue data to D-5 after the client supplies the 27th certificate name
+and its tier mapping.
 
-- **D-3/D-12:** `Role` and `RolePermission`, seeded from PRD §4.2. Seed all
-  eleven roles, not four — but only if Phase 0 confirms eleven.
-- **D-4:** the `Enrolment` ↔ `Programme` relationship. This is the single most
-  consequential open item: `Enrolment` carries `attendance_percentage`,
-  `certificate_eligible` and `upgrade_from_enrolment_id`, and a singular
-  `programme_id` cannot express many-to-many tier access. Resolve before
-  anything in phases 8–11 is built.
-- **D-5:** the certificate catalogue. The seed is a contract — it is what the
-  client sees on first login, and it must match PRD §11.3 exactly.
-- `Enrolment` and `MemberCertificate` (with `verification_id`, treated as
-  immutable once issued) land here or in phase 8 depending on D-4's shape.
-
-**Gate:** schema generates; seed matches §11 exactly; the retired-tier
-exclusion is enforced at the query level, not by filtering in the UI.
+**Gate:** schema/client generation works; role seed follows D-3/D-12; retired
+tiers are excluded from member queries; certificate seed and tier mapping wait
+for the missing name rather than inventing one.
 
 **Governing:** as Phase 2A, plus `AGENTS.md` §3 tier table.
 
 ---
 
-### Phase 3 — Public marketing site
+### Phase 3 — Public marketing site completion
+
+**Status:** Home, About, Programmes, Pricing, FAQ, and Contact exist. Reconcile
+their content/pricing with D-2 and finish any approved missing public surfaces.
 
 **Goal:** the unauthenticated surface, and the first real exercise of the design
 system.
@@ -336,12 +356,11 @@ and Contact. Build `components/ui/` as the shared set as you go —
 `Button`, `Card`, `TierCard`, `StatusChip`, `ProgressBar`, `Prose`,
 `SectionHeading`, form controls — each from token classes only.
 
-Hold the **Pricing page** until D-2 is answered. Publishing ₦375,000 next to
-₦750,000 to a visitor who will actually be charged ₦750,000 is a
-consumer-protection problem, not a display preference.
+Pricing display follows resolved D-2: public pages show official list prices;
+eligible members may see their discounted price after eligibility is computed.
 
-Events content is gated on D-11 (events are billed but unscoped); build the page
-against data that can be empty rather than inventing ticketing.
+Events are admin-managed content with a public listing per D-11. Do not add
+registration, ticketing, or capacity management.
 
 Optimise for the actual audience: mid-range Android on 3G. System font stack
 fallback, no web font blocking first paint, images sized and lazy, no
@@ -356,7 +375,11 @@ budgets agreed for 3G. All colour from roles.
 
 ---
 
-### Phase 4 — Notification abstraction
+### Phase 4 — Notification delivery
+
+**Status:** Notification abstraction exists with a console-only email provider.
+Implement production email delivery and the PRD-confirmed in-app notification
+storage/UI; keep SMS/WhatsApp/Telegram out of Phase 1.
 
 **Goal:** one seam so SMS, WhatsApp and Telegram arrive in Phase 2 without
 touching a single feature.
@@ -387,7 +410,9 @@ transaction; a test that no feature module imports a provider SDK directly.
 
 **Work:**
 
-1. `app/(auth)/` — register, login, verify, password reset. argon2id.
+1. `app/(auth)/` — registration, login, password reset. Email verification is
+   omitted from Phase 1 per client decision. Use Argon2id per
+   `.agents/rules/security.md`; migrate the current bcrypt runtime safely.
 2. Registration captures `ConsentRecord` (version, text, timestamp, IP, user
    agent) in the same transaction as the user.
 3. Session cookies: `HttpOnly`, `Secure`, `SameSite=Lax`, `Path=/`. Rotate the
@@ -396,9 +421,9 @@ transaction; a test that no feature module imports a provider SDK directly.
 4. CSRF: verify `Origin` on every non-GET route handler. SameSite=Lax covers
    cross-site POST but not same-site subdomain tricks, so the header check is
    not optional.
-5. Rate limits with real numbers, not "rate limiting should be considered":
-   5 attempts per 15 minutes on login, 3 per hour on reset, temporary lockout
-   after 10 failures.
+5. Confirmed rate limits: 5 attempts per 15 minutes on login, 3 per hour on
+   reset. Account lockout after 10 failures remains proposed in
+   `.agents/rules/security.md`; do not implement it unless approved.
 6. CSP as a response header. No `NEXT_PUBLIC_` variable may hold a secret —
    those are compiled into the client bundle.
 7. `lib/auth/` — `requireSession`, `requireRole`, `requireOwnership`. Every
@@ -421,7 +446,8 @@ test that a rate limit actually trips.
 
 **Goal:** least privilege, enforced in one place.
 
-**Blocked on D-3, D-12.**
+**Decision status:** D-3/D-12 are resolved. Implement the five assignable
+roles and hardcoded permission checks selected for Phase 1.
 
 **Work:** `lib/permissions/` keyed to the PRD §4.2 matrix. Admin cannot
 configure tiers or manage roles — Super Admin only. Only a Super Admin may
@@ -438,9 +464,10 @@ would silently pass review.
 
 ### Phase 7 — Pricing engine
 
-**Status: engine complete, display blocked.** Shipped in `d0ee762`; the gate
-below is met with 28 tests in `test/pricing.test.ts`. What remains for this
-phase is the D-1/D-2 display work, which cannot start.
+**Status: engine complete; D-1/D-2 display decisions resolved.** Shipped in
+`d0ee762`; the gate below is met with 28 tests in `test/pricing.test.ts`. Public
+display may show list prices; eligible members may see their confirmed discount.
+The code/data sources and UI still need alignment.
 
 **Goal:** pure, exhaustively tested money maths.
 
@@ -460,10 +487,9 @@ satisfy:
 - **BR-001** — one-time payments only, no recurring subscriptions. The type
   system should make a subscription unrepresentable.
 
-**Blocked on D-1 and D-2 for display, not for the engine.** Model discount
-eligibility as an explicit input parameter so the pure functions are testable
-today; D-2 decides where that input comes from and what the pricing page may
-show.
+Model discount eligibility as an explicit input parameter so the pure functions
+remain testable. D-2 is resolved; the member-facing caller supplies eligibility
+and public marketing uses list prices.
 
 **Gate:** the four worked examples as tests, plus explicit BR-003/004/005
 assertions, plus a test that retired tiers II/VI/VII are absent from every
@@ -477,22 +503,24 @@ comparison function's output.
 
 **Goal:** the manual payment path, with the state machine in one file.
 
-**Blocked on D-1, D-4, D-8.**
+**Decision status:** D-1, D-4, and D-8 are resolved. Payment/enrolment
+separation, the zero-cost O'Free exception, and same-row resubmission are
+specified; the payment workflow itself is not implemented.
 
 **Work:** `lib/payments/transitions.ts` as the only place `Payment.status`
 changes — never a route handler, never a component. Statuses: `Pending →
-Submitted → Under Review → Verified | Rejected`. Rejection requires a reason and
-permits resubmission (D-8 currently makes that impossible). Every transition
-writes an audit entry.
+Submitted → Under Review → Verified | Rejected`. Rejection requires a reason;
+resubmission reuses the same row and preserves rejection history. Every
+transition writes an audit entry.
 
 Also: proof upload with magic-byte sniffing, a 5MB cap, encryption at rest
 (SEC-004) and short-lived signed URLs; an admin queue and review screen; and
 amount reconciliation against the expected figure.
 
-Activation: an enrolment becomes `active` only when its linked payment reaches
-`Verified`. Entitlement is computed from *a Verified payment on an active
-enrolment* — never from "a payment record exists". D-1 must be resolved first,
-because a ₦0 tier has no payment to verify.
+Activation: a paid enrolment becomes `active` only when its linked payment
+reaches `Verified`. A zero-cost O'Free enrolment may activate on creation (D-1).
+Paid-tier entitlement is computed from *a Verified payment on an active
+enrolment* — never from "a payment record exists".
 
 **Gate:** a transition table test proving illegal moves are rejected; a test
 that resubmission works; a test that the amount on file matches the expected
@@ -507,10 +535,11 @@ figure; a test that activation did not happen for a pending payment.
 
 **Goal:** the authenticated member surface.
 
-**Blocked on D-1, D-4, D-6.**
+**Decision status:** D-1, D-4, and D-6 are resolved; implementation is not
+started.
 
-**Work:** `app/(member)/dashboard/`. Tier-gated materials (blocked on the
-missing `Material` entity), community links, payment history, profile, consent
+**Work:** `app/(member)/dashboard/`. Tier-gated materials (the `Material`
+entity is present in schema), community links, payment history, profile, consent
 controls, and data-subject request submission.
 
 **General community access is available to every tier including O'Free**
@@ -525,7 +554,8 @@ There is no marketplace and no member-to-member promotion, profiles with
 service offerings, or DMs (BR-012). Do not stub them "just in case".
 
 **Gate:** a test per access boundary; entitlement computed from
-`Verified` + `active`, asserted for each of the six tiers.
+`Verified` + `active` for paid tiers, with the D-1 zero-cost O'Free exception
+tested separately.
 
 **Governing:** `AGENTS.md` §3, `.agents/rules/architecture.md`.
 
@@ -535,7 +565,8 @@ service offerings, or DMs (BR-012). Do not stub them "just in case".
 
 **Goal:** admins run programmes without a developer (PRD §22.2).
 
-**Blocked on D-4.**
+**Decision status:** D-4 is resolved and `EnrolmentProgramme` is present in the
+schema; the CMS is not implemented.
 
 **Work:** admin CRUD for programmes and sessions, tier mapping, and a
 per-programme `attendance_threshold` with the 60% floor enforced in `lib/` and
@@ -556,7 +587,9 @@ zero — count by tier, which is unambiguous.
 
 **Goal:** the completion spine, all of it manual.
 
-**Blocked on D-4, D-5.**
+**Decision status:** D-4 is resolved. Attendance and completion can proceed;
+certificate catalogue completion is blocked on the missing D-5 name and tier
+mapping.
 
 **Work:**
 
@@ -566,11 +599,15 @@ zero — count by tier, which is unambiguous.
 - **Completion** — requires *all* of verified payment, ≥60% attendance,
   assignments/tests/projects complete, satisfactory performance, and relevant
   feedback (BR-008). An admin marks completion manually; never auto-complete
-  (BR-009).
+  (BR-009). Implemented in `lib/completion/` with `/admin/completion`, gated by
+  `hasPermission(admin, 'completion.mark')`. Two semantics are decisions, not
+  code facts, and remain unconfirmed with the client: `excused` does not count
+  toward attendance, and the attendance cache is currently one percentage per
+  enrolment rather than per programme.
 - **Certificates** — issued only after an admin marks the member Completed, and
   only as an explicit admin action, never as a side effect (BR-010). Names
   duplicated across tiers are de-duplicated before issuance. `verification_id`
-  is public; the record is immutable once issued.
+  is public; the record is immutable once issued. **Not started.**
 
 **Gate:** a test per completion condition and one proving that any single
 missing condition blocks completion; a test that no certificate exists before
@@ -584,8 +621,8 @@ the Completed transition; a de-duplication test.
 
 **Goal:** the remaining in-scope admin surface.
 
-**Blocked on Phase 6** (needs RBAC). Build around D-10 by reading the product
-type from a single enum rather than hardcoding the conflicting counts.
+**Dependency:** Phase 6 RBAC implementation. Use the D-10 physical/digital
+product enum and keep community access in a separate entitlement relation.
 
 Physical and digital product orders, feedback forms, and community link
 management. Feedback analytics is Phase 2 and stays out.
@@ -606,8 +643,9 @@ explicitly (SEC-014). Retention enforcement per data category (SEC-016).
 Sensitive-field flagging for health data and payment proof (SEC-017).
 
 Retention must be anchored to a fixed expiry (Phase 2A), and attendance records
-must outlive certificates, or the two policies contradict each other and
-erasure becomes undecidable.
+must outlive certificates. The client requires a legal-approved retention
+schedule before production personal-data processing; current seed day counts
+are provisional and not legally approved.
 
 **Gate:** a test that erasure honours the anchored policy rather than resetting
 on activity; a test that a breach record can represent both notified and

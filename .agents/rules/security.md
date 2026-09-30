@@ -27,9 +27,10 @@ await requireRole(session, ["admin", "super_admin"]);
 - Super Admin only: tier configuration, role assignment, mentor promotion,
   permission changes.
 - Admin: operational actions per PRD §4.2. Nothing more.
-- **Check permissions, not just roles.** Roles are coarse; PRD §4.2 is a
-  matrix of role *and* permission. Use `lib/permissions/` for the
-  permission-level check and `lib/auth/` for the role-level check.
+- Enforce the PRD §4.2 matrix through hardcoded checks for the five assignable
+  roles confirmed in D-3. D-12 records no `RolePermission` table as the Phase 1
+  technical approach. Keep checks centralized in `lib/permissions/` and session
+  validation in `lib/auth/`.
 
 ### CSRF
 
@@ -110,10 +111,8 @@ Payment proof uploads are the main upload surface in Phase 1.
 ## Passwords and sessions
 
 - argon2id. Never MD5, never SHA-256 alone, never plain.
-- Session timeout on inactivity — pick a number and write it down. Suggest
-  30 minutes for admins, 7 days for members, both with an absolute lifetime
-  cap (e.g. 30 days) so an idle session cannot live forever. Confirm with the
-  client; do not leave it as an unstated default.
+- Session timeout on inactivity: 30 minutes for admins and 7 days for members,
+  with a 30-day absolute cap (D-14; confirmed by the client on 2026-09-28).
 - **Rotate the session ID on login and on privilege change** (elevation,
   role change) to prevent session fixation.
 - **Invalidate all sessions on password change and on password reset.**
@@ -121,11 +120,10 @@ Payment proof uploads are the main upload surface in Phase 1.
   anything else.
 - Cookies: `Secure`, `httpOnly`, `SameSite=Lax`, scoped `Path=/`. No tokens in
   `localStorage` or `sessionStorage`.
-- **Rate limit with real numbers.** Baseline: 5 attempts per 15 minutes per IP
-  on login, 3 per hour on password reset, exponential backoff plus lockout
-  after 10 failures per account. An unquantified rate limit is not
-  implemented. Centralise it in `lib/auth/rateLimit.ts` so every route shares
-  one counter rather than each inventing a limit.
+- **Rate limit with real numbers.** Confirmed baseline: 5 login attempts per 15
+  minutes and 3 password-reset attempts per hour (D-14). Exponential backoff
+  and lockout after 10 failures per account remain proposed unless separately
+  approved. Centralize counters so every instance shares the applicable limit.
 - Password reset tokens: single-use, short expiry (≤ 1 hour), invalidated on
   use, and compared in constant time.
 

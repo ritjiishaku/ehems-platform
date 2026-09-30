@@ -136,6 +136,7 @@ Missing email → member resends. Rolled-back payment → member calls support.
 | Type                            | Email | In-app | Consent gate         |
 | ------------------------------- | ----- | ------ | -------------------- |
 | `registration_welcome`          | ✅    | ✅     | None — transactional |
+| `password_reset`                 | ✅    | —      | None — security      |
 | `payment_submitted`             | ✅    | ✅     | None — transactional |
 | `payment_verified`              | ✅    | ✅     | None — transactional |
 | `payment_rejected`              | ✅    | ✅     | None — transactional |
@@ -165,6 +166,7 @@ Store templates as code, not in the database. Version them with the repo.
 ```
 lib/notifications/templates/
   registration-welcome.ts
+  password-reset.ts
   payment-submitted.ts
   payment-verified.ts
   payment-rejected.ts
@@ -421,6 +423,7 @@ Notifications are a personal-data touchpoint:
 ## What to test
 
 - [ ] Registration writes a `Notification` row and sends an email
+- [ ] Password reset writes/sends a one-time reset notification without exposing whether an account exists
 - [ ] Payment submission writes a `Notification` row
 - [ ] Payment verification writes rows for both `payment_verified` and
       `tier_activated`

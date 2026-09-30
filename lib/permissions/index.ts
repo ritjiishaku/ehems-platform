@@ -16,9 +16,8 @@
  *
  * 2. **Pure.** Reads the in-code matrix, not the database, so a check is a
  *    synchronous function that needs no session, no query, and no Prisma client.
- *    The seeded `role_permission` rows must agree with this matrix —
- *    `scripts/verify-seed.sql` asserts that and CI runs it — so the two cannot
- *    drift without a red build.
+ *    D-12 selects this hardcoded matrix for Phase 1; there is no
+ *    `RolePermission` table.
  *
  * Least privilege: callers pass the specific permission they need. There is no
  * `requireAdmin` helper here on purpose, because it invites "or above" thinking.

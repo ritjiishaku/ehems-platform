@@ -1,9 +1,8 @@
 /**
  * The PRD §4.2 permission matrix, encoded as data.
  *
- * §4.2 is a 13×5 grid of action × role. Writing it as a literal table rather
- * than as code means the tests iterate the same rows the seed writes, so a row
- * cannot be asserted one way and seeded another.
+ * §4.2 is a 13×5 grid of action × role. The table is the Phase 1 permission
+ * source of truth; tests assert its grants directly.
  *
  * The three Super-Admin-only actions at the bottom are the reason this file
  * exists as separate data rather than as a role hierarchy. `admin` and
@@ -17,10 +16,9 @@ import { MATRIX_ROLE_KEYS, type RoleKey } from './roles';
 /**
  * One row of the matrix.
  *
- * `resource` and `action` are stored separately on the Permission row
- * (PRD §16.1) so a permission can be granted per resource — `payment.verify`
- * rather than a free-floating `verify`. The `key` is `${resource}.${action}` and
- * is the only string a caller should pass to `hasPermission`.
+ * `resource` and `action` are represented separately per PRD §16.1. The
+ * `key` is `${resource}.${action}` and is the only string a caller should pass
+ * to `hasPermission`. D-12 means these grants are code-defined in Phase 1.
  */
 export type PermissionDefinition = {
   key: string;
@@ -43,7 +41,7 @@ export const PERMISSIONS = {
     resource: 'site',
     action: 'view',
     label: 'View public site',
-    grantedTo: ['visitor', 'member', 'mentor', 'admin', 'superAdmin'],
+    grantedTo: ['visitor', 'member', 'mentor', 'admin', 'super_admin'],
   },
   signUp: {
     key: 'account.sign_up',
@@ -57,35 +55,35 @@ export const PERMISSIONS = {
     resource: 'member',
     action: 'dashboard',
     label: 'Access member dashboard',
-    grantedTo: ['member', 'mentor', 'admin', 'superAdmin'],
+    grantedTo: ['member', 'mentor', 'admin', 'super_admin'],
   },
   downloadProgrammeMaterials: {
     key: 'material.download',
     resource: 'material',
     action: 'download',
     label: 'Download programme materials',
-    grantedTo: ['member', 'mentor', 'admin', 'superAdmin'],
+    grantedTo: ['member', 'mentor', 'admin', 'super_admin'],
   },
   accessCommunityLinks: {
     key: 'community.access',
     resource: 'community',
     action: 'access',
     label: 'Access community links',
-    grantedTo: ['member', 'mentor', 'admin', 'superAdmin'],
+    grantedTo: ['member', 'mentor', 'admin', 'super_admin'],
   },
   submitPaymentProof: {
     key: 'payment.submit_proof',
     resource: 'payment',
     action: 'submit_proof',
     label: 'Submit payment proof',
-    grantedTo: ['member', 'mentor', 'admin', 'superAdmin'],
+    grantedTo: ['member', 'mentor', 'admin', 'super_admin'],
   },
   verifyPayment: {
     key: 'payment.verify',
     resource: 'payment',
     action: 'verify',
     label: 'Verify payment',
-    grantedTo: ['admin', 'superAdmin'],
+    grantedTo: ['admin', 'super_admin'],
   },
   markAttendance: {
     key: 'attendance.mark',
@@ -97,7 +95,7 @@ export const PERMISSIONS = {
     // narrowing it would be inventing a rule the PRD does not state. Phase 1
     // attendance is manual by admin only (BR-009/AGENTS.md §3), which is
     // enforced by who can reach the attendance route, not by this row.
-    grantedTo: ['mentor', 'admin', 'superAdmin'],
+    grantedTo: ['mentor', 'admin', 'super_admin'],
   },
   markCompletion: {
     key: 'completion.mark',
@@ -105,7 +103,7 @@ export const PERMISSIONS = {
     action: 'mark',
     label: 'Mark completion',
     // Admin marks completion manually, never automatically (BR-009).
-    grantedTo: ['admin', 'superAdmin'],
+    grantedTo: ['admin', 'super_admin'],
   },
   issueCertificates: {
     key: 'certificate.issue',
@@ -113,7 +111,7 @@ export const PERMISSIONS = {
     action: 'issue',
     label: 'Issue certificates',
     // BR-010: an explicit admin action, never a side effect of completion.
-    grantedTo: ['admin', 'superAdmin'],
+    grantedTo: ['admin', 'super_admin'],
   },
   promoteMentor: {
     key: 'mentor.promote',
@@ -121,7 +119,7 @@ export const PERMISSIONS = {
     action: 'promote',
     label: 'Promote mentor',
     // Super Admin only. AGENTS.md §3: "Admin cannot promote a mentee to Mentor."
-    grantedTo: ['superAdmin'],
+    grantedTo: ['super_admin'],
   },
   configureTiers: {
     key: 'tier.configure',
@@ -129,7 +127,7 @@ export const PERMISSIONS = {
     action: 'configure',
     label: 'Configure tiers',
     // Super Admin only. AGENTS.md §3.
-    grantedTo: ['superAdmin'],
+    grantedTo: ['super_admin'],
   },
   manageRoles: {
     key: 'role.manage',
@@ -137,7 +135,7 @@ export const PERMISSIONS = {
     action: 'manage',
     label: 'Manage roles',
     // Super Admin only. AGENTS.md §3.
-    grantedTo: ['superAdmin'],
+    grantedTo: ['super_admin'],
   },
 } as const;
 
@@ -157,9 +155,8 @@ export const PERMISSION_STRS: readonly string[] = PERMISSION_LIST.map((p) => p.k
 /**
  * Roles that hold a given permission, per this table.
  *
- * Read from the in-code matrix, NOT from the database. The seeded RolePermission
- * rows must match this — `scripts/verify-seed.sql` asserts they do, and CI runs
- * it — so an authorisation check can stay pure and testable without a query.
+ * Read from the in-code matrix, NOT from the database. D-12 selects hardcoded
+ * checks for Phase 1, so this matrix is the authorization source of truth.
  */
 export function rolesWithPermission(key: PermissionKey): readonly RoleKey[] {
   return PERMISSIONS[key].grantedTo;

@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import localFont from 'next/font/local';
+import { headers } from 'next/headers';
 import { roleHex } from '@/lib/theme';
 import './globals.css';
 
@@ -43,7 +44,12 @@ export const viewport: Viewport = {
   initialScale: 1,
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // Reading the per-request nonce makes the document dynamic. Next.js can then
+  // apply the nonce from the CSP request header to its inline framework scripts.
+  const nonce = (await headers()).get('x-nonce');
+  if (!nonce) throw new Error('The request security proxy did not provide a CSP nonce');
+
   return (
     // data-theme="light" is the single light-mode pin for the whole app.
     //

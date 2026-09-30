@@ -26,6 +26,9 @@ export default async function MemberLayout({ children }: { children: React.React
             <Link href="/dashboard" className="hover:text-on-surface">
               Dashboard
             </Link>
+            <Link href="/dashboard/payments" className="hover:text-on-surface">
+              Payments
+            </Link>
             <Link href="/" className="hover:text-on-surface">
               Public site
             </Link>

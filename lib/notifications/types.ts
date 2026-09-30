@@ -14,6 +14,7 @@ export type NotificationEventType =
   | 'PAYMENT_VERIFIED'
   | 'PAYMENT_REJECTED'
   | 'CERTIFICATE_ISSUED'
+  | 'PASSWORD_RESET'
   | 'NDPA_CONSENT_WITHDRAWN';
 
 export interface BaseRecipient {
@@ -55,6 +56,11 @@ export interface CertificateIssuedPayload {
   verificationUrl: string;
 }
 
+export interface PasswordResetPayload {
+  name: string;
+  resetUrl: string;
+}
+
 export interface NdpaConsentWithdrawnPayload {
   name: string;
   withdrawnAt: string;
@@ -66,6 +72,7 @@ export type EventPayloadMap = {
   PAYMENT_VERIFIED: PaymentVerifiedPayload;
   PAYMENT_REJECTED: PaymentRejectedPayload;
   CERTIFICATE_ISSUED: CertificateIssuedPayload;
+  PASSWORD_RESET: PasswordResetPayload;
   NDPA_CONSENT_WITHDRAWN: NdpaConsentWithdrawnPayload;
 };
 

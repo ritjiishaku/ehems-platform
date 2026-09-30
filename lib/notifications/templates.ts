@@ -143,6 +143,21 @@ export function renderEmailTemplate<T extends NotificationEventType>(
       return { subject, html, text };
     }
 
+    case 'PASSWORD_RESET': {
+      const p = payload as EventPayloadMap['PASSWORD_RESET'];
+      const subject = 'Reset your EHEMS password';
+      const text = `Hello ${p.name},\n\nUse this one-time link to reset your EHEMS password. It expires in one hour:\n${p.resetUrl}\n\nIf you did not request a reset, you can ignore this email.`;
+      const html = shell(
+        'Reset your password',
+        EMAIL_COLOR.heading,
+        `<p>Hello ${escapeHtml(p.name)},</p>
+          <p>Use this one-time link to reset your EHEMS password. It expires in one hour.</p>
+          ${button(p.resetUrl, 'Reset password')}
+          <p>If you did not request a reset, you can ignore this email.</p>`,
+      );
+      return { subject, html, text };
+    }
+
     case 'NDPA_CONSENT_WITHDRAWN': {
       const p = payload as EventPayloadMap['NDPA_CONSENT_WITHDRAWN'];
       const subject = 'Confirmation of NDPA Consent Withdrawal';

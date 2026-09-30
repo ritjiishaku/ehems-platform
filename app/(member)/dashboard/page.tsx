@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { getCurrentUser } from '@/lib/auth';
+import { roleLabel } from '@/lib/permissions';
 
 export default async function DashboardPage() {
   const user = await getCurrentUser();
@@ -22,6 +23,30 @@ export default async function DashboardPage() {
           className="inline-flex items-center rounded-full bg-primary px-4 py-2 text-label-large text-on-primary"
         >
           View public site
+        </Link>
+        <Link
+          href="/dashboard/payments"
+          className="text-label-large text-primary underline-offset-4 hover:underline"
+        >
+          Payments
+        </Link>
+        <Link
+          href="/settings/consent"
+          className="text-label-large text-primary underline-offset-4 hover:underline"
+        >
+          Privacy and consent
+        </Link>
+        <Link
+          href="/settings/profile"
+          className="text-label-large text-primary underline-offset-4 hover:underline"
+        >
+          Edit profile
+        </Link>
+        <Link
+          href="/settings/data-requests"
+          className="text-label-large text-primary underline-offset-4 hover:underline"
+        >
+          Data rights
         </Link>
       </div>
 
@@ -45,7 +70,9 @@ export default async function DashboardPage() {
         <section className="rounded-3xl border border-outline-variant bg-surface-container p-6 shadow-sm">
           <p className="title-small text-on-surface-variant">Profile</p>
           <h2 className="headline-small mt-3 text-on-surface">{user.email}</h2>
-          <p className="body-medium mt-3 text-on-surface-variant">Role: {user.role}</p>
+          <p className="body-medium mt-3 text-on-surface-variant">
+            Role: {user.role ? roleLabel(user.role) : 'Unassigned'}
+          </p>
         </section>
       </div>
     </div>

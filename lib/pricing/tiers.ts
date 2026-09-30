@@ -175,3 +175,15 @@ export function getTier(id: TierId): Tier {
 export function getTierByName(name: string): Tier | undefined {
   return TIERS.find((tier) => tier.name === name);
 }
+
+/**
+ * Narrow an untrusted string to a `TierId`.
+ *
+ * The union is the BR-016 guarantee, so the only way to honour it at a boundary
+ * is to test membership rather than cast. Without this, a `tierId` arriving from a
+ * form would need `as TierId`, and a cast is exactly the hole a retired tier
+ * walks through.
+ */
+export function isTierId(value: string): value is TierId {
+  return TIERS.some((tier) => tier.id === value);
+}

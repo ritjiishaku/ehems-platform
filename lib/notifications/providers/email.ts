@@ -28,13 +28,18 @@ export class ConsoleEmailProvider implements EmailProvider {
   public sentEmails: SendEmailOptions[] = [];
 
   async sendEmail(options: SendEmailOptions): Promise<EmailProviderResult> {
+    if (process.env.NODE_ENV === 'production') {
+      return {
+        success: false,
+        error: 'Transactional email provider is not configured for production',
+      };
+    }
+
     const messageId = `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     this.sentEmails.push(options);
 
     if (process.env.NODE_ENV !== 'test') {
-      console.log(
-        `[EmailProvider:${this.name}] Sent "${options.subject}" to ${options.to} (${messageId})`,
-      );
+      console.log(`[EmailProvider:${this.name}] Sent "${options.subject}" (${messageId})`);
     }
 
     return {

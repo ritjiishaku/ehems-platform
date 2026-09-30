@@ -14,6 +14,12 @@ Thumbs.db
 .env.*
 !.env.example
 
+# vercel CLI project link. Machine-local metadata (project id, org id) written by
+# `vercel link`. It is not a secret, but it is per-checkout state: committing it
+# makes a clone on another machine look linked to this project, and it has no
+# business in the repository.
+/.vercel/
+
 # playwright
 /test-results/
 /playwright-report/

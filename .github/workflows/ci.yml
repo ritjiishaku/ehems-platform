@@ -33,6 +33,11 @@ env:
   # not run at all without it, even though nothing here connects. The database
   # job overrides it with the service container's address.
   DATABASE_URL: postgresql://postgres:postgres@localhost:5432/ehems?schema=public
+  # The direct (unpooled) twin of the above. See the `directUrl` note in
+  # prisma/schema.prisma: the schema engine needs a persistent connection, which
+  # a transaction pooler cannot give it. The service container has no pooler, so
+  # the two URLs are identical here — they diverge in production, not in CI.
+  DATABASE_URL_UNPOOLED: postgresql://postgres:postgres@localhost:5432/ehems?schema=public
   AUTH_SESSION_SECRET: ci-only-not-a-real-session-secret-0000000000
   APP_BASE_URL: https://ehems.example.invalid
 
@@ -105,6 +110,7 @@ jobs:
 
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/ehems?schema=public
+      DATABASE_URL_UNPOOLED: postgresql://postgres:postgres@localhost:5432/ehems?schema=public
 
     steps:
       - uses: actions/checkout@v4
@@ -190,6 +196,7 @@ jobs:
 
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/ehems?schema=public
+      DATABASE_URL_UNPOOLED: postgresql://postgres:postgres@localhost:5432/ehems?schema=public
       AUTH_SESSION_SECRET: e2e-only-not-a-real-session-secret-0000000000
       APP_BASE_URL: http://127.0.0.1:3000
       PAYMENT_PROOF_ENCRYPTION_KEY: l5GEdWwpU2geAYkXCtv7eok7D0IfgbBDMlhlQIPKjPA=

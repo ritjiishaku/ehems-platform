@@ -29,6 +29,13 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  // Neon serves `DATABASE_URL` through PgBouncer in transaction mode, which is
+  // right for serverless runtime traffic but not for the Prisma CLI. The schema
+  // engine holds a single persistent connection to read migration state, and
+  // transaction pooling returns the connection after every transaction, so
+  // `migrate deploy`/`db push` fail against the pooled URL. `directUrl` is the
+  // same database without the pooler, used only by Prisma CLI commands.
+  directUrl = env("DATABASE_URL_UNPOOLED")
 }
 
 // ---------------------------------------------------------------------------

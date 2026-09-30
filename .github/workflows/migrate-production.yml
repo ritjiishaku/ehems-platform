@@ -1,0 +1,99 @@
+name: Migrate production
+
+# Applies pending Prisma migrations to the production database (Neon).
+#
+# This is deliberately NOT wired to `push: main`. Every other push to this repo
+# is a code-only change; the database should advance when a human decides it
+# should, in the same commit as the deploy that needs it. Auto-migrating on
+# push means a bad migration lands before anyone has read it.
+#
+# Why this exists as a workflow at all: the Neon endpoint is reachable from
+# GitHub's runners but not from developer laptops (the local egress blocks
+# outbound 5432), so `npm run db:deploy` is not runnable from a workstation.
+# See AGENTS.md section 10 — migrations must be applied, not just generated.
+#
+# Usage:
+#   1. Put the two credentials in repo secrets (see the "Setup" section in
+#      .env.example) as DATABASE_URL and DATABASE_URL_UNPOOLED.
+#   2. Actions -> Migrate production -> Run workflow.
+#
+# Requires the DATABASE_URL and DATABASE_URL_UNPOOLED repository secrets. It
+# writes to the live database; treat the first run as a supervised one.
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: >-
+          Type the name of the environment to confirm. Protects against a
+          stray click applying migrations to production.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+# Serialise runs. Two concurrent migrate deploys against one database is how
+# you get a half-applied migration history. Never cancel a run mid-deploy.
+concurrency:
+  group: migrate-production
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+
+    # `environment` is what puts this behind a reviewer gate if the repo later
+    # adds required reviewers to a `production` environment. That gate is the
+    # real safety mechanism, not the confirm string below.
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      # Refuse before installing anything, so a mistyped confirmation fails
+      # fast and costs nothing.
+      - name: Confirm target
+        env:
+          CONFIRM: ${{ inputs.confirm }}
+        run: |
+          if [ "$CONFIRM" != "production" ]; then
+            echo "::error::Confirmation did not match 'production'. Aborting."
+            exit 1
+          fi
+
+      - run: npm ci
+
+      # Prisma's client is not committed and npm install scripts may be
+      # blocked; generate before anything imports it.
+      - run: npm run db:generate
+
+      - name: Apply migrations
+        env:
+          # Both are required. `migrate deploy` uses DATABASE_URL_UNPOOLED
+          # because the pooled endpoint cannot hold a persistent connection,
+          # but Prisma still validates DATABASE_URL when loading the schema.
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
+        run: npm run db:deploy
+
+      # Prints the applied/pending counts. A non-empty "pending" column here
+      # means the deploy silently did less than intended.
+      - name: Verify no migrations left pending
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
+        run: npx prisma migrate status
+
+      # The seed is upserts, so this is safe to re-run and is the intended way
+      # to get tiers/roles onto a freshly provisioned database.
+      - name: Seed reference data
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
+        run: npm run db:seed

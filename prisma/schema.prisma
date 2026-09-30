@@ -1,14 +1,17 @@
 // =============================================================================
-// EHEMS Platform — Prisma Schema (Phase 2A)
+// EHEMS Platform — Prisma Schema (Phase 2A + decision-dependent domain models)
 //
-// ONLY unblocked entities are modelled here. Blocked entities wait for their
-// respective decisions in docs/decisions.md:
+// The current schema contains the approved domain structures as well as
+// decision-dependent models. Client decisions are recorded in
+// docs/decisions.md; schema presence does not mean the feature workflow is
+// implemented.
 //
-//   D-3  / D-12 → Role (Resolved to 5 roles, no RolePermission table)
-//   D-4         → Enrolment, EnrolmentProgramme, AttendanceRecord (Phase 2B)
-//   D-5         → Tier, MemberCertificate, TierCertificate (Phase 2B)
-//   D-6         → Material (Phase 2B)
-//   D-1  / D-8  → Payment, PaymentAuditEntry              (Phase 8)
+//   D-3 / D-12 → five assignable roles; authorization rejects legacy role keys
+//   D-4         → EnrolmentProgramme many-to-many (modeled below)
+//   D-5         → 27 certificates approved; catalogue currently has 26 names
+//   D-6         → Material attached to Programme (modeled below)
+//   D-1 / D-8  → free-tier exception/resubmission decided; the Payment model and
+//                  the manual verification workflow are modeled below
 //
 // Conventions (AGENTS.md §7):
 //   - All field names snake_case via @map; relation names camelCase in code
@@ -35,34 +38,41 @@ datasource db {
 // fixed date (never "N days from last activity") per SEC-016 and Phase 2A
 // guidance in docs/implementation-plan.md.
 //
-// phone is nullable because it is not captured at registration in Phase 1;
-// it will be added to the profile step in Phase 5. Nigerian format enforced
-// in lib/validation/ not here.
+// phone remains nullable for legacy rows; registration now requires a
+// normalized Nigerian number. Nigerian format is enforced in lib/validation/.
 // ---------------------------------------------------------------------------
 model User {
-  id                 String    @id @default(cuid()) @map("id")
-  email              String    @unique @map("email")
-  name               String    @map("name")
-  phone              String?   @map("phone")
-  passwordHash       String    @map("password_hash")
+  id                     String    @id @default(cuid()) @map("id")
+  email                  String    @unique @map("email")
+  name                   String    @map("name")
+  phone                  String?   @map("phone")
+  profession             String?   @map("profession")
+  healthcareSpecialty    String?   @map("healthcare_specialty")
+  passwordHash           String    @map("password_hash")
+  passwordResetTokenHash String?   @unique @map("password_reset_token_hash")
+  passwordResetExpiresAt DateTime? @map("password_reset_expires_at")
   // FK to Role (Phase 2B) � the single authoritative "current role" the session reads.
   // Nullable because a user with no role holds NO permissions.
-  roleId             String?   @map("role_id")
-  deletedAt          DateTime? @map("deleted_at")
-  dataRetentionUntil DateTime? @map("data_retention_until")
-  createdAt          DateTime  @default(now()) @map("created_at")
-  updatedAt          DateTime  @updatedAt @map("updated_at")
+  roleId                 String?   @map("role_id")
+  deletedAt              DateTime? @map("deleted_at")
+  dataRetentionUntil     DateTime? @map("data_retention_until")
+  createdAt              DateTime  @default(now()) @map("created_at")
+  updatedAt              DateTime  @updatedAt @map("updated_at")
 
-  sessions            Session[]
-  consentRecords      ConsentRecord[]
-  dataSubjectRequests DataSubjectRequest[]
-  notifications       Notification[]
-  actorAuditLogs      AuditLog[]           @relation("AuditLogActor")
-  roleRef             Role?                @relation("UserCurrentRole", fields: [roleId], references: [id], onDelete: SetNull)
-  userRoles           UserRole[]
-  enrolments          Enrolment[]
-  attendanceRecords   AttendanceRecord[]
-  certificates        MemberCertificate[]
+  sessions                   Session[]
+  consentRecords             ConsentRecord[]
+  dataSubjectRequests        DataSubjectRequest[]
+  dataSubjectRequestsHandled DataSubjectRequest[] @relation("DataSubjectRequestHandledBy")
+  notifications              Notification[]
+  actorAuditLogs             AuditLog[]           @relation("AuditLogActor")
+  roleRef                    Role?                @relation("UserCurrentRole", fields: [roleId], references: [id], onDelete: SetNull)
+  userRoles                  UserRole[]
+  enrolments                 Enrolment[]
+  attendanceRecords          AttendanceRecord[]
+  certificates               MemberCertificate[]
+  payments                   Payment[]            @relation("PaymentUser")
+  paymentsOpened             Payment[]            @relation("PaymentOpenedBy")
+  paymentsVerified           Payment[]            @relation("PaymentVerifiedBy")
 
   @@index([email])
   @@index([deletedAt])
@@ -78,8 +88,8 @@ model User {
 // token never touches the DB. Rotating the session on login and privilege
 // change: delete old row, insert new.
 //
-// absoluteExpiresAt caps sessions at 30 days regardless of activity
-// (D-14 proposed default; see docs/decisions.md).
+// expiresAt is refreshed on activity using the role-specific inactivity window;
+// absoluteExpiresAt caps sessions at the client-confirmed 30 days (D-14).
 // ---------------------------------------------------------------------------
 model Session {
   id                String   @id @default(cuid()) @map("id")
@@ -99,6 +109,17 @@ model Session {
   @@map("session")
 }
 
+// Shared, short-window auth throttling. Keys are HMAC digests, not raw email/IP.
+model AuthRateLimitBucket {
+  keyHash   String     @id @map("key_hash")
+  attempts  DateTime[] @default([]) @map("attempts")
+  expiresAt DateTime   @map("expires_at")
+  updatedAt DateTime   @updatedAt @map("updated_at")
+
+  @@index([expiresAt])
+  @@map("auth_rate_limit_bucket")
+}
+
 // ---------------------------------------------------------------------------
 // ConsentRecord  (SEC-011, SEC-012)
 // ---------------------------------------------------------------------------
@@ -106,15 +127,25 @@ model Session {
 // withdrawnAt is set on withdrawal — the row is NEVER deleted.
 // A new row is inserted whenever consent is re-granted after withdrawal.
 // ---------------------------------------------------------------------------
+enum ConsentType {
+  data_processing
+  marketing
+  sensitive_data
+  cross_border_transfer
+
+  @@map("consent_type")
+}
+
 model ConsentRecord {
-  id             String    @id @default(cuid()) @map("id")
-  userId         String    @map("user_id")
-  consentVersion String    @map("consent_version")
-  consentText    String    @map("consent_text")
-  capturedAt     DateTime  @default(now()) @map("captured_at")
-  ipAddress      String?   @map("ip_address")
-  userAgent      String?   @map("user_agent")
-  withdrawnAt    DateTime? @map("withdrawn_at")
+  id             String      @id @default(cuid()) @map("id")
+  userId         String      @map("user_id")
+  consentType    ConsentType @default(data_processing) @map("consent_type")
+  consentVersion String      @map("consent_version")
+  consentText    String      @map("consent_text")
+  capturedAt     DateTime    @default(now()) @map("captured_at")
+  ipAddress      String?     @map("ip_address")
+  userAgent      String?     @map("user_agent")
+  withdrawnAt    DateTime?   @map("withdrawn_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Restrict)
 
@@ -142,7 +173,12 @@ model AuditLog {
   metadata   Json?    @map("metadata")
   createdAt  DateTime @default(now()) @map("created_at")
 
-  actor User? @relation("AuditLogActor", fields: [actorId], references: [id], onDelete: SetNull)
+  // `onDelete: Restrict`, not SetNull. SEC-015 makes the audit trail immutable
+  // and the append-only trigger blocks the UPDATE that SetNull would need, so a
+  // SetNull FK declared a cascade the database can never perform. Restrict says
+  // what is true: a user with audit history is not hard-deletable, and erasure
+  // goes through anonymisation instead (AGENTS.md section 3).
+  actor User? @relation("AuditLogActor", fields: [actorId], references: [id], onDelete: Restrict)
 
   @@index([actorId])
   @@index([entityType, entityId])
@@ -163,14 +199,20 @@ model DataSubjectRequest {
   requestType   String    @map("request_type")
   status        String    @default("pending") @map("status")
   handlingNotes String?   @map("handling_notes")
+  // PRD §16.1 `handled_by` — the staff member who owns the request. A row
+  // trigger cannot carry attribution, so it is written by the transition in
+  // lib/ndpa/data-subject-requests.ts alongside the audit entry.
+  handledBy     String?   @map("handled_by")
   resolvedAt    DateTime? @map("resolved_at")
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
 
-  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  user          User  @relation(fields: [userId], references: [id], onDelete: Restrict)
+  handledByUser User? @relation("DataSubjectRequestHandledBy", fields: [handledBy], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@index([status])
+  @@index([handledBy])
   @@map("data_subject_request")
 }
 
@@ -330,9 +372,14 @@ model FeedbackResponse {
 // Key/value config. Admins can change settings without a code deploy.
 // ---------------------------------------------------------------------------
 model SystemSetting {
-  key       String   @id @map("key")
-  value     String   @map("value")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  key         String   @id @map("key")
+  value       String   @map("value")
+  description String?  @map("description")
+  // A string rather than a User FK because bootstrap and seed changes may run
+  // without a user row. Admin UI changes use the authenticated user id; seed
+  // changes use a stable source label such as `seed:test-payments`.
+  updatedBy   String?  @map("updated_by")
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
   @@map("system_setting")
 }
@@ -539,6 +586,8 @@ model Enrolment {
   completionMarkedBy           String?   @map("completion_marked_by")
   attendancePercentage         Int       @default(0) @map("attendance_percentage")
   assignmentChecklistCompleted Boolean   @default(false) @map("assignment_checklist_completed")
+  performanceSatisfactory      Boolean   @default(false) @map("performance_satisfactory")
+  feedbackConsidered           Boolean   @default(false) @map("feedback_considered")
   certificateEligible          Boolean   @default(false) @map("certificate_eligible")
   upgradeFromEnrolmentId       String?   @map("upgrade_from_enrolment_id")
 
@@ -549,6 +598,11 @@ model Enrolment {
   attendanceRecords    AttendanceRecord[]
   assignmentChecklists AssignmentChecklist[]
   certificates         MemberCertificate[]
+  // One-to-many, not one-to-one. D-8 reuses the same row for a resubmission, but
+  // nothing forbids a second purchase intent against the same enrolment later, and
+  // a `@unique` enrolmentId would make that impossible to record rather than
+  // merely unusual. Activation reads the payment id, so it does not care.
+  payments             Payment[]
 
   @@index([userId])
   @@index([tierId])
@@ -556,9 +610,13 @@ model Enrolment {
 }
 
 model EnrolmentProgramme {
-  enrolmentId         String @map("enrolment_id")
-  programmeId         String @map("programme_id")
-  attendanceThreshold Int    @map("attendance_threshold") // Snapshotted from Programme
+  enrolmentId          String @map("enrolment_id")
+  programmeId          String @map("programme_id")
+  attendanceThreshold  Int    @map("attendance_threshold") // Snapshotted from Programme
+  // Cached per-programme percentage. PRD §12.3 measures attendance per programme,
+  // so a member on two programmes must not be able to pool sessions across them to
+  // clear one programme's threshold. Derived from AttendanceRecord, never truth.
+  attendancePercentage Int    @default(0) @map("attendance_percentage")
 
   enrolment Enrolment @relation(fields: [enrolmentId], references: [id], onDelete: Cascade)
   programme Programme @relation(fields: [programmeId], references: [id], onDelete: Cascade)
@@ -585,6 +643,10 @@ model AttendanceRecord {
   @@index([userId])
   @@index([sessionId])
   @@index([enrolmentId])
+  // One manual attendance decision per member per session. Re-marking updates
+  // the same record and preserves the latest actor/notes instead of inflating
+  // the denominator with duplicate rows.
+  @@unique([enrolmentId, sessionId])
   @@map("attendance_record")
 }
 
@@ -601,6 +663,76 @@ model AssignmentChecklist {
 
   @@index([enrolmentId])
   @@map("assignment_checklist")
+}
+
+// ---------------------------------------------------------------------------
+// Payment (D-8, D-9)
+// ---------------------------------------------------------------------------
+// PRD §16.4, manual verification only. There is no gateway: the member pays by
+// bank transfer or mobile money, uploads proof, and an admin verifies it.
+//
+// `order_id` is deliberately absent. PRD §16.4 pairs a Payment with an Order,
+// but D-10 sequences the Product/Order/Entitlement work behind this workflow
+// and does not yet settle Order's own status vocabulary, so modelling a half
+// Order now would add a dangling FK that has to be migrated later anyway. The
+// column arrives with the Order model; the table is empty until then, so adding
+// it later is a plain additive migration with no backfill (D-21).
+//
+// `payment_reference` and `proof_url` are nullable because a row in `pending`
+// means "created, awaiting proof upload" (D-9). Making either required would make
+// that state unrepresentable.
+//
+// There is no `channel`, `provider_reference`, or `provider_status`. Phase 2
+// adds those in their own migration if a gateway is ever approved; speculative
+// gateway columns rot.
+enum PaymentStatus {
+  pending // created, awaiting proof upload
+  submitted // proof uploaded, sitting in the verification queue
+  under_review // an admin has opened it
+  verified // approved — activates the linked enrolment
+  rejected // refused with a reason; the member may resubmit
+}
+
+model Payment {
+  id               String        @id @default(cuid()) @map("id")
+  userId           String        @map("user_id")
+  enrolmentId      String?       @map("enrolment_id")
+  amountKobo       Int           @map("amount_kobo")
+  currency         String        @default("NGN") @map("currency")
+  paymentMethod    String?       @map("payment_method")
+  paymentReference String?       @map("payment_reference")
+  bankName         String?       @map("bank_name")
+  transferDate     DateTime?     @map("transfer_date")
+  // Points at the encrypted-at-rest object, never at a readable path (SEC-004).
+  proofUrl         String?       @map("proof_url")
+  status           PaymentStatus @default(pending) @map("status")
+  submittedAt      DateTime?     @map("submitted_at")
+  openedBy         String?       @map("opened_by")
+  underReviewedAt  DateTime?     @map("under_reviewed_at")
+  verifiedAt       DateTime?     @map("verified_at")
+  verifiedBy       String?       @map("verified_by")
+  // Cleared only by a fresh successful verification, never by a resubmission:
+  // the audit log is the history, and the row keeps its last rejection reason
+  // so an admin picking it up can still see why it bounced (D-8).
+  rejectionReason  String?       @map("rejection_reason")
+  createdAt        DateTime      @default(now()) @map("created_at")
+  updatedAt        DateTime      @updatedAt @map("updated_at")
+
+  user           User       @relation("PaymentUser", fields: [userId], references: [id], onDelete: Restrict)
+  // SetNull rather than Restrict: an enrolment that is cancelled must not take a
+  // financial record with it. The payment outlives the enrolment it paid for.
+  enrolment      Enrolment? @relation(fields: [enrolmentId], references: [id], onDelete: SetNull)
+  openedByUser   User?      @relation("PaymentOpenedBy", fields: [openedBy], references: [id], onDelete: SetNull)
+  verifiedByUser User?      @relation("PaymentVerifiedBy", fields: [verifiedBy], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([status])
+  @@index([enrolmentId])
+  // PostgreSQL partial unique index in
+  // 20260929150000_prevent_duplicate_pending_payments: one open purchase
+  // intent per member; historical submitted/verified/rejected rows remain
+  // unrestricted. Prisma cannot express a partial index in the schema DSL.
+  @@map("payment")
 }
 
 // ---------------------------------------------------------------------------

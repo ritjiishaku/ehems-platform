@@ -12,7 +12,7 @@
     "test": "npm run test:tokens && npm run test:app",
     "test:e2e": "playwright test",
     "dev": "next dev",
-    "build": "next build",
+    "build": "prisma generate && next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "lint": "eslint",
@@ -63,5 +63,12 @@
   },
   "prisma": {
     "seed": "npm run db:seed"
+  },
+  "allowScripts": {
+    "@prisma/client": true,
+    "@prisma/engines": true,
+    "prisma": true,
+    "argon2": true,
+    "unrs-resolver": true
   }
 }

@@ -99,6 +99,16 @@ Three traps worth knowing before you touch the gates or the database:
   traces the whole project into the server output — every source file and
   `public/`. The annotation must sit on the bare argument to the fs function;
   putting it inside a `path.join(...)` is silently ignored (vercel/next.js#95125).
+- **npm 12 blocks dependency install scripts, so `prisma generate` is not
+  optional on a deploy host.** `@prisma/client` generates its client from its own
+  `postinstall`. npm 12 skips every dependency install script that is not covered
+  by `allowScripts` in `package.json`, which silently leaves the client
+  ungenerated and makes `next build`'s `tsc` fail with ~150 phantom errors
+  (`no exported member 'ConsentType'`, `Property 'payment' does not exist on
+  PrismaClient`) that name real models and enums. Every one of those errors is a
+  lie. `build` runs `prisma generate` first precisely so it does not depend on
+  that policy; `allowScripts` is only the second layer. Local `verify` and CI both
+  hide this — CI has always run `db:generate` by hand.
 - **Playwright always builds first.** It runs `next build && next start`, because
   dev serves unminified bundles (~852 KB vs ~188 KB) and any bandwidth assertion
   taken against dev is meaningless.

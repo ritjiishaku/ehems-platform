@@ -59,8 +59,29 @@ import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
-/** 5 MB. A phone photo of a receipt is 1-3 MB; a 10 MB file is not a receipt. */
-export const MAX_PROOF_BYTES = 5 * 1024 * 1024;
+/**
+ * 4 MB. A phone photo of a receipt is 1-3 MB; a 10 MB file is not a receipt.
+ *
+ * The ceiling is set by the *storage platform*, not by taste. Vercel caps a
+ * server-side blob upload at 4.5 MB, and this is the only place a proof is ever
+ * uploaded — so a larger limit would mean the validator accepts a file that the
+ * store then refuses, and the member gets a generic failure for something they
+ * could fix by taking the photo again.
+ *
+ * 4 MB leaves margin under the platform cap for the ciphertext framing and for
+ * the possibility that the cap is measured on the request body. `proofSizeLimit`
+ * pins the relationship in a test so the two cannot silently drift apart again.
+ */
+export const MAX_PROOF_BYTES = 4 * 1024 * 1024;
+
+/**
+ * The one member-facing size message.
+ *
+ * Exported so `lib/validation/payment.ts` and `validateProofUpload` cannot drift
+ * apart — they did once, and the Zod copy went on claiming a limit the validator
+ * had already stopped enforcing.
+ */
+export const PROOF_SIZE_LIMIT_MESSAGE = `Proof must be under ${Math.floor(MAX_PROOF_BYTES / (1024 * 1024))} MB. Photograph the receipt again at a lower resolution.`;
 
 /**
  * SEC-005, the type allow-list.
@@ -141,10 +162,7 @@ export async function validateProofUpload(file: File): Promise<ProofRejection> {
     return { ok: false, message: 'That file is empty. Upload a photo or PDF of your receipt.' };
   }
   if (file.size > MAX_PROOF_BYTES) {
-    return {
-      ok: false,
-      message: `Proof must be under ${Math.floor(MAX_PROOF_BYTES / (1024 * 1024))} MB. Photograph the receipt again at a lower resolution.`,
-    };
+    return { ok: false, message: PROOF_SIZE_LIMIT_MESSAGE };
   }
   if (!ALLOWED_MIME.has(file.type)) {
     return {

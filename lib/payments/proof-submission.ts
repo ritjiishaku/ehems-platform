@@ -23,7 +23,12 @@
  * with the client yet (`docs/decisions.md` CR-10).
  */
 
-import { deleteProofObject, validateProofUpload, writeProofObject } from './proofs';
+import {
+  deleteProofObject,
+  PROOF_SIZE_LIMIT_MESSAGE,
+  validateProofUpload,
+  writeProofObject,
+} from './proofs';
 import { resubmitProof, submitProof, type PaymentOutcome, type ProofDetails } from './transitions';
 import type { PaymentMethod, PaymentStatus } from './types';
 
@@ -40,6 +45,27 @@ export type ProofUploadInput = {
 export type ProofUploadOutcome =
   { ok: true; status: PaymentStatus } | { ok: false; message: string };
 
+/**
+ * Turn a storage failure into something the member can act on.
+ *
+ * The size case is matched on the message rather than on a Vercel error class
+ * because the driver boundary deliberately knows nothing about Vercel: a future
+ * driver has its own vocabulary, and `MAX_PROOF_BYTES` is validated before any
+ * driver is called. This is the safety net for the case where the two ever
+ * disagree, not the primary check.
+ */
+function uploadFailureMessage(error: unknown): string {
+  const detail = error instanceof Error ? `${error.name} ${error.message}` : '';
+
+  if (detail.includes('PAYMENT_PROOF_ENCRYPTION_KEY')) {
+    return 'Proof uploads are not available right now. Please contact the EHEMS team.';
+  }
+  if (/too large|exceeds|BlobFileTooLarge|entity too large|413/i.test(detail)) {
+    return PROOF_SIZE_LIMIT_MESSAGE;
+  }
+  return 'We could not store your proof of payment. Please try again.';
+}
+
 async function storeAndTransition(
   input: ProofUploadInput,
   action: 'submit' | 'resubmit',
@@ -51,12 +77,15 @@ async function storeAndTransition(
   try {
     ({ storageKey } = await writeProofObject(input.paymentId, checked.bytes));
   } catch (error) {
-    // Almost always a missing PAYMENT_PROOF_ENCRYPTION_KEY. Say that rather than
-    // surfacing an OpenSSL error the member cannot act on.
-    const message =
-      error instanceof Error && error.message.includes('PAYMENT_PROOF_ENCRYPTION_KEY')
-        ? 'Proof uploads are not available right now. Please contact the EHEMS team.'
-        : 'We could not store your proof of payment. Please try again.';
+    // Three distinct failures, three different things to tell the member, because
+    // only one of them is worth retrying.
+    //
+    // A missing encryption key is an operator problem and retrying changes
+    // nothing. A store-side size refusal is the member's to fix — take the photo
+    // again — so it gets the actionable message rather than a shrug, which is the
+    // right answer even though `validateProofUpload` should already have caught
+    // it. Everything else is a transient store problem worth one more try.
+    const message = uploadFailureMessage(error);
     return { ok: false, message };
   }
 

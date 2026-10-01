@@ -6,11 +6,17 @@ const nextConfig: NextConfig = {
   // log fills with warnings that look like test failures.
   allowedDevOrigins: ['127.0.0.1'],
   experimental: {
-    // Next's default server-action body limit is 1 MB, which is under the 5 MB
+    // Next's default server-action body limit is 1 MB, which is well under the
     // payment-proof ceiling in `lib/payments/proofs.ts`. The alignment matters:
-    // the Zod schema and the proof validator both refuse anything over 5 MB, and
-    // this is the outer envelope that must not reject a valid file first. A
-    // member photographing a receipt on a mid-range Android produces 2-4 MB.
+    // the Zod schema and the proof validator both refuse anything over
+    // `MAX_PROOF_BYTES`, and this is the outer envelope that must not reject a
+    // valid file first — a member photographing a receipt on a mid-range Android
+    // produces 1-3 MB.
+    //
+    // It sits above the validator's ceiling on purpose, so the member sees the
+    // proof validator's actionable "photograph it again at a lower resolution"
+    // message rather than a generic body-limit error from the framework. Keep the
+    // headroom: the two limits answer different questions and should not be equal.
     serverActions: {
       bodySizeLimit: '6mb',
     },

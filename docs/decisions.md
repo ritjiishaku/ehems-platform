@@ -596,6 +596,17 @@ environment at all.
   the UI. It is never set on a deployed host, so a production deploy that forgot
   `PAYMENT_PROOF_STORE=blob` still fails loudly.
 
+**The proof size ceiling is set by the platform, not by taste.** Vercel caps a
+server-side blob upload at 4.5 MB, and this is the only place a proof is ever
+uploaded. The limit was originally 5 MB, chosen before a store existed, which
+meant a member could pass validation and then be refused by the platform with a
+message they could not act on. `MAX_PROOF_BYTES` is now 4 MB, leaving margin for
+the ciphertext framing, and a test pins it below the platform cap so the two
+cannot drift apart again. `next.config.ts`'s `bodySizeLimit` deliberately stays
+above the validator ceiling so the member sees the validator's actionable
+"photograph it again at a lower resolution" message rather than a generic
+framework body-limit error.
+
 **Not addressed here:** SEC-005 malware scanning of proofs remains an open gap,
 and is recorded as such rather than silently ticked off.
 

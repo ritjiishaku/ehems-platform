@@ -6,10 +6,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   assertProofKey,
   deleteProofObject,
+  MAX_PROOF_BYTES,
+  PROOF_SIZE_LIMIT_MESSAGE,
   proofStorageKey,
   readProofObject,
+  validateProofUpload,
   writeProofObject,
 } from '@/lib/payments/proofs';
+import { submitProofUpload } from '@/lib/payments/proof-submission';
 
 /**
  * The payment proof storage seam (SEC-004).
@@ -32,6 +36,7 @@ const blob = vi.hoisted(() => ({
   getCalls: [] as Array<{ pathname: string; options: unknown }>,
   delCalls: [] as string[],
   objects: new Map<string, Buffer>(),
+  putError: null as Error | null,
 }));
 
 vi.mock('@vercel/blob', () => {
@@ -52,6 +57,7 @@ vi.mock('@vercel/blob', () => {
   return {
     BlobNotFoundError,
     put: async (pathname: string, body: Buffer, options: unknown) => {
+      if (blob.putError) throw blob.putError;
       blob.putCalls.push({ pathname, body: Buffer.from(body), options });
       blob.objects.set(pathname, Buffer.from(body));
       return { ...metadata(pathname), contentType: 'application/octet-stream' };
@@ -102,11 +108,58 @@ beforeEach(async () => {
   blob.getCalls.length = 0;
   blob.delCalls.length = 0;
   blob.objects.clear();
+  blob.putError = null;
 });
 
 afterEach(async () => {
   vi.unstubAllEnvs();
   await fs.rm(tempRoot, { recursive: true, force: true });
+});
+
+describe('the proof size ceiling', () => {
+  /**
+   * Vercel's own quickstart states the hard cap for a server-side blob upload.
+   * It is the constraint the validator exists to respect, and the two have
+   * drifted before: the limit was 5 MB while the store would only take 4.5 MB, so
+   * a member could pass validation and then be failed by the platform with a
+   * message they could not act on.
+   */
+  const PLATFORM_SERVER_UPLOAD_CAP = Math.floor(4.5 * 1000 * 1000);
+
+  it('never exceeds the storage platform server-upload cap', () => {
+    expect(MAX_PROOF_BYTES).toBeLessThan(PLATFORM_SERVER_UPLOAD_CAP);
+  });
+
+  it('refuses a file above the ceiling before anything is stored', async () => {
+    const oversized = new File([new Uint8Array(MAX_PROOF_BYTES + 1)], 'receipt.jpg', {
+      type: 'image/jpeg',
+    });
+
+    const checked = await validateProofUpload(oversized);
+
+    expect(checked.ok).toBe(false);
+    expect(checked.ok === false && checked.message).toBe(PROOF_SIZE_LIMIT_MESSAGE);
+  });
+
+  it('accepts a file exactly at the ceiling', async () => {
+    // Exactly at the limit, with a real JPEG magic prefix so this exercises the
+    // size boundary and not the type check. The boundary is inclusive on purpose:
+    // a member whose file is precisely at the limit should be accepted, which is
+    // what pins `<=` rather than `<`.
+    const atLimit = Buffer.concat([JPEG, Buffer.alloc(MAX_PROOF_BYTES - JPEG.length)]);
+    expect(atLimit.length).toBe(MAX_PROOF_BYTES);
+
+    const file = new File([atLimit], 'receipt.jpg', { type: 'image/jpeg' });
+
+    expect((await validateProofUpload(file)).ok).toBe(true);
+  });
+
+  it('states the real limit in the message rather than a stale number', () => {
+    // This literal said "5 MB" while the constant was 4 MB, which told a member
+    // to try again on a file that would still be refused.
+    expect(PROOF_SIZE_LIMIT_MESSAGE).toContain(`${Math.floor(MAX_PROOF_BYTES / (1024 * 1024))} MB`);
+    expect(PROOF_SIZE_LIMIT_MESSAGE).not.toMatch(/under 5 MB/);
+  });
 });
 
 describe('proof key validation', () => {
@@ -335,5 +388,67 @@ describe('the blob driver', () => {
     blob.objects.delete(storageKey);
 
     await expect(readProofObject(storageKey)).rejects.toThrow(/could not be read/);
+  });
+});
+
+/**
+ * A store that refuses an upload is the one failure a member sees a message for,
+ * so what that message says decides whether they retry or give up. These go
+ * through `submitProofUpload` rather than the helper directly: the point is what
+ * the member is told, not which branch produced it.
+ */
+describe('what a member is told when storage refuses the upload', () => {
+  const input = {
+    paymentId: PAYMENT_ID,
+    userId: 'user-1',
+    file: new File([JPEG], 'receipt.jpg', { type: 'image/jpeg' }),
+    paymentMethod: 'bank_transfer' as const,
+    paymentReference: 'REF-123',
+    bankName: 'Test Bank',
+    transferDate: new Date('2026-01-05T09:00:00Z'),
+  };
+
+  beforeEach(() => {
+    vi.stubEnv('PAYMENT_PROOF_STORE', 'blob');
+  });
+
+  it('asks them to retake the photo when the store refuses the size', async () => {
+    blob.putError = Object.assign(new Error('request entity too large'), {
+      name: 'BlobFileTooLargeError',
+    });
+
+    const outcome = await submitProofUpload(input);
+
+    expect(outcome).toEqual({ ok: false, message: PROOF_SIZE_LIMIT_MESSAGE });
+  });
+
+  it('points at the operator when the encryption key is missing', async () => {
+    // Retrying cannot fix this, so it must not read as "try again".
+    vi.stubEnv('PAYMENT_PROOF_ENCRYPTION_KEY', '');
+
+    const outcome = await submitProofUpload(input);
+
+    expect(outcome.ok).toBe(false);
+    expect(outcome.ok === false && outcome.message).toMatch(/contact the EHEMS team/);
+  });
+
+  it('offers a retry for an ordinary store failure', async () => {
+    blob.putError = new Error('ECONNRESET');
+
+    const outcome = await submitProofUpload(input);
+
+    expect(outcome).toEqual({
+      ok: false,
+      message: 'We could not store your proof of payment. Please try again.',
+    });
+  });
+
+  it('never leaves a half-written object behind when the store refuses', async () => {
+    blob.putError = new Error('ECONNRESET');
+
+    await submitProofUpload(input);
+
+    expect(blob.objects.size).toBe(0);
+    expect(blob.delCalls).toHaveLength(0);
   });
 });

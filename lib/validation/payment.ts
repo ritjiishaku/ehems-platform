@@ -15,7 +15,7 @@
  */
 
 import { z } from 'zod';
-import { MAX_PROOF_BYTES } from '@/lib/payments/proofs';
+import { MAX_PROOF_BYTES, PROOF_SIZE_LIMIT_MESSAGE } from '@/lib/payments/proofs';
 import { PAYMENT_METHODS } from '@/lib/payments/types';
 
 const ALLOWED_PROOF_MIME = [
@@ -40,7 +40,7 @@ export const paymentProofSchema = z.object({
   proof: z
     .instanceof(File, { message: 'Upload proof of payment.' })
     .refine((file) => file.size > 0, 'That file is empty.')
-    .refine((file) => file.size <= MAX_PROOF_BYTES, 'Proof must be under 5 MB.'),
+    .refine((file) => file.size <= MAX_PROOF_BYTES, PROOF_SIZE_LIMIT_MESSAGE),
 });
 
 /**

@@ -9,6 +9,7 @@ import {
   passwordResetSchema,
   registerSchema,
 } from '@/lib/validation/auth';
+import { MemberSafeError, memberFacingAuthError } from '@/lib/auth/member-safe-error';
 import { CONSENT_TEXT, CONSENT_VERSION } from '@/lib/ndpa/consent';
 import { consentWithdrawalSchema } from '@/lib/validation/consent';
 import { profileUpdateSchema } from '@/lib/validation/profile';
@@ -112,6 +113,42 @@ describe('registration boundary schema', () => {
 
   it('rejects a malformed email', () => {
     expect(registerSchema.safeParse({ ...valid, email: 'not-an-email' }).success).toBe(false);
+  });
+});
+
+describe('member-facing error disclosure', () => {
+  it('shows a deliberately member-safe message', () => {
+    expect(
+      memberFacingAuthError(new MemberSafeError('Invalid email or password'), 'login', 'x'),
+    ).toBe('Invalid email or password');
+  });
+
+  it('replaces an internal error with the fallback instead of rendering it', () => {
+    // The shape that leaked: a Prisma failure naming our table, on a public page.
+    const leaked = new Error(
+      'Invalid `prisma.user.findUnique()` invocation: The table `public.user` does not exist in the current database.',
+    );
+    const shown = memberFacingAuthError(leaked, 'registration', 'Please try again in a moment.');
+    expect(shown).toBe('Please try again in a moment.');
+    expect(shown).not.toContain('prisma');
+    expect(shown).not.toContain('public.user');
+  });
+
+  it('does not treat an unlabelled error as safe, including from our own layer', () => {
+    expect(
+      memberFacingAuthError(new Error("The O'Free tier is not configured"), 'registration', 'x'),
+    ).toBe('x');
+  });
+
+  it('handles a non-Error throw', () => {
+    expect(memberFacingAuthError('connection terminated', 'registration', 'x')).toBe('x');
+  });
+
+  it('keeps a labelled subclass of the marker recognisable', () => {
+    class DuplicateEmailError extends MemberSafeError {}
+    expect(memberFacingAuthError(new DuplicateEmailError('taken'), 'registration', 'x')).toBe(
+      'taken',
+    );
   });
 });
 

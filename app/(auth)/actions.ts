@@ -5,6 +5,7 @@ import { headers } from 'next/headers';
 import { authenticateUser, registerUser, signIn } from '@/lib/auth';
 import { completePasswordReset, requestPasswordReset } from '@/lib/auth/password-reset';
 import { assertSameOrigin, CsrfError } from '@/lib/auth/csrf';
+import { memberFacingAuthError } from '@/lib/auth/member-safe-error';
 import {
   clearRateLimit,
   consumeRateLimit,
@@ -96,7 +97,13 @@ export async function registerAction(formData: FormData) {
       userAgent,
     });
   } catch (error) {
-    registerError(error instanceof Error ? error.message : 'Unable to create account');
+    registerError(
+      memberFacingAuthError(
+        error,
+        'registration',
+        'Unable to create your account right now. Please try again in a moment.',
+      ),
+    );
   }
 
   await signIn(user);
@@ -138,7 +145,9 @@ export async function loginAction(formData: FormData) {
   try {
     user = await authenticateUser({ email, password, ipAddress, userAgent });
   } catch (error) {
-    loginError(error instanceof Error ? error.message : 'Unable to log in');
+    loginError(
+      memberFacingAuthError(error, 'login', 'Unable to log you in right now. Please try again.'),
+    );
   }
 
   await clearRateLimit(throttleKey);

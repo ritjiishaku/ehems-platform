@@ -24,6 +24,7 @@ import { sendNotification } from '@/lib/notifications';
 import { CONSENT_TEXT, CONSENT_VERSION } from '@/lib/ndpa/consent';
 import { hashPassword, passwordHashNeedsUpgrade, verifyPassword } from './password';
 import { ABSOLUTE_SESSION_MS, sessionExpiryAfterActivity } from './session-policy';
+import { MemberSafeError } from './member-safe-error';
 
 import { isRoleKey, type RoleKey } from '@/lib/permissions/roles';
 
@@ -127,12 +128,12 @@ export async function registerUser(input: {
   const trimmedName = input.name.trim();
 
   if (!trimmedName || !normalizedEmail || input.password.length < 8) {
-    throw new Error('Invalid registration details');
+    throw new MemberSafeError('Invalid registration details');
   }
 
   const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
   if (existing) {
-    throw new Error('An account with that email address already exists');
+    throw new MemberSafeError('An account with that email address already exists');
   }
 
   const passwordHash = await hashPassword(input.password);
@@ -164,6 +165,11 @@ export async function registerUser(input: {
       // Registration must not succeed without the D-1 entitlement. Throwing
       // rolls back the user and consent together rather than creating an account
       // whose first-login state depends on a later repair job.
+      //
+      // Deliberately *not* a MemberSafeError: a missing tier is a server
+      // misconfiguration (usually an unseeded database), and naming it to a
+      // member would disclose our configuration state. The action logs it and
+      // shows a generic failure instead.
       throw new Error("The O'Free tier is not configured");
     }
 
@@ -247,12 +253,12 @@ export async function authenticateUser(input: {
   // does not reveal whether the address is registered.
   if (!user || user.deletedAt) {
     await hashPassword(input.password);
-    throw new Error('Invalid email or password');
+    throw new MemberSafeError('Invalid email or password');
   }
 
   const isValid = await verifyPassword(input.password, user.passwordHash);
   if (!isValid) {
-    throw new Error('Invalid email or password');
+    throw new MemberSafeError('Invalid email or password');
   }
 
   if (passwordHashNeedsUpgrade(user.passwordHash)) {

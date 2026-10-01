@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { prisma } from '@/lib/db/client';
 import { registerUser } from '@/lib/auth';
+import { MemberSafeError } from '@/lib/auth/member-safe-error';
 
 /**
  * Registration is the first D-1 entitlement boundary. This belongs in a DB test
@@ -71,5 +72,37 @@ describe("registration creates the D-1 O'Free entitlement", () => {
     expect(
       await prisma.consentRecord.count({ where: { userId, consentType: 'data_processing' } }),
     ).toBe(1);
+  });
+});
+
+describe('registration errors that a member is allowed to read', () => {
+  it('labels a duplicate-email rejection so the action shows it', async () => {
+    // Unlabelled, this message would be replaced by the generic fallback and the
+    // member would not learn why their signup bounced. The label is what makes
+    // the disclosure deliberate rather than accidental.
+    await expect(
+      registerUser({
+        name: 'Duplicate Email Attempt',
+        email,
+        password: 'correct-horse-battery',
+        phone: '+2348031234567',
+        profession: 'Pharmacist',
+      }),
+    ).rejects.toBeInstanceOf(MemberSafeError);
+  });
+
+  it('creates no orphan user or consent record when registration is refused', async () => {
+    const before = await prisma.user.count({ where: { email } });
+    await expect(
+      registerUser({
+        name: 'Duplicate Email Attempt',
+        email,
+        password: 'correct-horse-battery',
+        phone: '+2348031234567',
+        profession: 'Pharmacist',
+      }),
+    ).rejects.toBeInstanceOf(MemberSafeError);
+    expect(await prisma.user.count({ where: { email } })).toBe(before);
+    expect(await prisma.consentRecord.count({ where: { user: { email } } })).toBe(1);
   });
 });

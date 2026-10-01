@@ -152,8 +152,7 @@ test('admin opens, re-authenticates, views, and verifies the payment', async ({ 
   await expect(paymentCard).toBeVisible();
   const openButton = paymentCard.getByRole('button', { name: 'Open for review' });
   await expect(openButton).toBeEnabled();
-  await openButton.scrollIntoViewIfNeeded();
-  await openButton.click({ force: true });
+  await openButton.click();
 
   const inReviewCard = page
     .locator('section[aria-labelledby="in-review"] li')
@@ -178,8 +177,7 @@ test('admin opens, re-authenticates, views, and verifies the payment', async ({ 
     .first();
   await verifiedCard.locator('form').last().getByLabel('Your password').fill(adminPassword);
   const recordButton = verifiedCard.getByRole('button', { name: 'Record outcome' });
-  await recordButton.scrollIntoViewIfNeeded();
-  await recordButton.click({ force: true });
+  await recordButton.click();
   await expect(page).toHaveURL(/\/admin\/payments\?verified=1/);
   await expect(page.getByText('Verified. The member')).toBeVisible();
 });
@@ -192,8 +190,7 @@ test('Super Admin can update payment settings with re-authentication', async ({ 
   await page.getByLabel('Support name').fill('EHEMS E2E Support Updated');
   await page.getByLabel('Your password').fill(adminPassword);
   const saveButton = page.getByRole('button', { name: 'Save payment settings' });
-  await saveButton.scrollIntoViewIfNeeded();
-  await saveButton.click({ force: true });
+  await saveButton.click();
 
   await expect(page).toHaveURL(/\/admin\/payment-settings\?status=updated/);
   await expect(page.getByText('Payment settings updated')).toBeVisible();

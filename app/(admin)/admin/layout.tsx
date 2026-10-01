@@ -16,7 +16,16 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   return (
     <div className="min-h-screen bg-background text-on-surface">
       <header className="border-b border-outline-variant bg-surface-container">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
+        {/* `flex-wrap` on the row and the nav is load-bearing, not tidiness.
+            Without it the six links cannot fit a 375px viewport, the document
+            overflows to ~766px, and the layout viewport expands to match - which
+            is a WCAG 1.4.10 reflow failure and, because Chromium reports rects in
+            the layout viewport while input events are dispatched in the visual
+            one, it also silently breaks every Playwright click on this page. The
+            marketing header drops its links below `md` instead; a shell cannot,
+            because these links are the admin's only navigation and hiding them
+            would need a client component, i.e. JS shipped to members on 3G. */}
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-x-6 gap-y-3 px-6 py-4">
           <Link href="/" className="flex items-center gap-3 text-on-surface">
             <span className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-label-large text-on-primary">
               E
@@ -24,7 +33,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             <span className="headline-small">EHEMS admin</span>
           </Link>
 
-          <nav className="flex items-center gap-6 text-label-large text-on-surface-variant">
+          <nav className="flex flex-wrap items-center gap-x-6 gap-y-3 text-label-large text-on-surface-variant">
             <Link href="/admin/payments" className="hover:text-on-surface">
               Payments
             </Link>

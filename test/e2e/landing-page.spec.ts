@@ -306,8 +306,14 @@ test.describe('authentication surfaces', () => {
     await expect(page.getByLabel('Full name')).toBeVisible();
     await expect(page.getByLabel('Email address')).toBeVisible();
     await expect(page.getByLabel('Nigerian phone number')).toBeVisible();
-    await expect(page.getByLabel('Profession')).toBeVisible();
-    await expect(page.getByLabel(/healthcare specialty/i)).toBeVisible();
+    await expect(page.getByLabel('Profession', { exact: true })).toBeVisible();
+    // Both password fields exist, and the reveal control is labelled in a way
+    // that a bare /password/i match would also hit, hence `exact`.
+    await expect(page.getByLabel('Password', { exact: true })).toBeVisible();
+    await expect(page.getByLabel('Confirm password', { exact: true })).toBeVisible();
+    // Deliberately absent: FR-014 puts the specialty on the profile page, and
+    // PRD §Phase 1 lists signup capture as name, email, phone, and profession.
+    await expect(page.getByLabel(/healthcare specialty/i)).toHaveCount(0);
     await expect(page.getByLabel(/agree to the ehems terms/i)).toBeVisible();
 
     const overflow = await page.evaluate(() => ({

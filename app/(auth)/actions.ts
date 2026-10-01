@@ -73,13 +73,13 @@ export async function registerAction(formData: FormData) {
     email: formData.get('email'),
     phone: formData.get('phone'),
     profession: formData.get('profession'),
-    healthcareSpecialty: formData.get('healthcareSpecialty') || undefined,
     password: formData.get('password'),
+    confirmPassword: formData.get('confirmPassword'),
   });
 
   if (!parsed.success) registerError(firstIssueMessage(parsed.error));
 
-  const { fullName, email, password, phone, profession, healthcareSpecialty } = parsed.data;
+  const { fullName, email, password, phone, profession } = parsed.data;
   const requestHeaders = await headers();
   const ipAddress = clientIp(requestHeaders);
   const userAgent = requestHeaders.get('user-agent') ?? undefined;
@@ -92,7 +92,6 @@ export async function registerAction(formData: FormData) {
       password,
       phone,
       profession,
-      healthcareSpecialty,
       ipAddress,
       userAgent,
     });

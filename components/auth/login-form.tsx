@@ -1,5 +1,7 @@
 import Link from 'next/link';
 import { loginAction } from '@/app/(auth)/actions';
+import PasswordInput from './password-input';
+import { authInputClass } from './input-class';
 
 /**
  * Login form. Presentational, for the same reason as RegisterForm — see the
@@ -52,7 +54,7 @@ export default function LoginForm({ error, status }: { error?: string; status?: 
               name="email"
               type="email"
               autoComplete="email"
-              className="border-outline bg-surface-container-lowest text-on-surface focus:border-primary focus:ring-primary/20 mt-1.5 w-full rounded-xl border px-3.5 py-2.5 outline-none transition-all focus:ring-2"
+              className={authInputClass}
               placeholder="you@example.com"
               required
             />
@@ -67,20 +69,13 @@ export default function LoginForm({ error, status }: { error?: string; status?: 
             </Link>
           </div>
 
-          <div>
-            <label htmlFor="password" className="label-medium text-on-surface block font-medium">
-              Password
-            </label>
-            <input
-              id="password"
-              name="password"
-              type="password"
-              autoComplete="current-password"
-              className="border-outline bg-surface-container-lowest text-on-surface focus:border-primary focus:ring-primary/20 mt-1.5 w-full rounded-xl border px-3.5 py-2.5 outline-none transition-all focus:ring-2"
-              placeholder="Enter your password"
-              required
-            />
-          </div>
+          <PasswordInput
+            id="password"
+            name="password"
+            label="Password"
+            autoComplete="current-password"
+            placeholder="Enter your password"
+          />
 
           <button
             type="submit"

@@ -1,6 +1,21 @@
 import Link from 'next/link';
 import { registerAction } from '@/app/(auth)/actions';
 import { CONSENT_TEXT } from '@/lib/ndpa/consent';
+import PasswordInput from './password-input';
+import { authInputClass } from './input-class';
+
+/**
+ * Shared input treatment for every auth form.
+ *
+ * The forms hand-rolled this string independently four times, which meant a
+ * density change had to be applied in four places and one was usually missed.
+ * Centralised here rather than in `components/ui/` because these inputs also
+ * need right-hand padding for the password toggle, which is an auth concern.
+ *
+ * `py-2` rather than the original `py-2.5`: seven fields plus a confirm field
+ * overflowed a 375px viewport, and 40px clears the WCAG 2.2 AA 24px minimum with
+ * room to spare. Submit buttons keep `py-3`.
+ */
 
 /**
  * Registration form.
@@ -38,7 +53,7 @@ export default function RegisterForm({ error }: { error?: string }) {
           </p>
         ) : null}
 
-        <form action={registerAction} className="mt-5 space-y-3.5">
+        <form action={registerAction} className="mt-5 space-y-3">
           <div>
             <label htmlFor="fullName" className="label-medium text-on-surface block font-medium">
               Full name
@@ -48,7 +63,7 @@ export default function RegisterForm({ error }: { error?: string }) {
               name="fullName"
               type="text"
               autoComplete="name"
-              className="border-outline bg-surface-container-lowest text-on-surface focus:border-primary focus:ring-primary/20 mt-1 w-full rounded-xl border px-3.5 py-2.5 outline-none transition-all focus:ring-2"
+              className={authInputClass}
               placeholder="Your full name"
               required
             />
@@ -63,7 +78,7 @@ export default function RegisterForm({ error }: { error?: string }) {
               name="email"
               type="email"
               autoComplete="email"
-              className="border-outline bg-surface-container-lowest text-on-surface focus:border-primary focus:ring-primary/20 mt-1 w-full rounded-xl border px-3.5 py-2.5 outline-none transition-all focus:ring-2"
+              className={authInputClass}
               placeholder="you@example.com"
               required
             />
@@ -78,7 +93,7 @@ export default function RegisterForm({ error }: { error?: string }) {
               name="phone"
               type="tel"
               autoComplete="tel"
-              className="border-outline bg-surface-container-lowest text-on-surface focus:border-primary focus:ring-primary/20 mt-1 w-full rounded-xl border px-3.5 py-2.5 outline-none transition-all focus:ring-2"
+              className={authInputClass}
               placeholder="08031234567 or +2348031234567"
               required
             />
@@ -93,44 +108,28 @@ export default function RegisterForm({ error }: { error?: string }) {
               name="profession"
               type="text"
               autoComplete="organization-title"
-              className="border-outline bg-surface-container-lowest text-on-surface focus:border-primary focus:ring-primary/20 mt-1 w-full rounded-xl border px-3.5 py-2.5 outline-none transition-all focus:ring-2"
+              className={authInputClass}
               placeholder="Your healthcare profession"
               required
             />
           </div>
 
-          <div>
-            <label
-              htmlFor="healthcareSpecialty"
-              className="label-medium text-on-surface block font-medium"
-            >
-              Healthcare specialty (optional)
-            </label>
-            <input
-              id="healthcareSpecialty"
-              name="healthcareSpecialty"
-              type="text"
-              autoComplete="off"
-              className="border-outline bg-surface-container-lowest text-on-surface focus:border-primary focus:ring-primary/20 mt-1 w-full rounded-xl border px-3.5 py-2.5 outline-none transition-all focus:ring-2"
-              placeholder="Your specialty, if applicable"
-            />
-          </div>
+          <PasswordInput
+            id="password"
+            name="password"
+            label="Password"
+            autoComplete="new-password"
+            placeholder="Create a password"
+            minLength={8}
+          />
 
-          <div>
-            <label htmlFor="password" className="label-medium text-on-surface block font-medium">
-              Password
-            </label>
-            <input
-              id="password"
-              name="password"
-              type="password"
-              autoComplete="new-password"
-              className="border-outline bg-surface-container-lowest text-on-surface focus:border-primary focus:ring-primary/20 mt-1 w-full rounded-xl border px-3.5 py-2.5 outline-none transition-all focus:ring-2"
-              placeholder="Create a password"
-              minLength={8}
-              required
-            />
-          </div>
+          <PasswordInput
+            id="confirmPassword"
+            name="confirmPassword"
+            label="Confirm password"
+            autoComplete="new-password"
+            minLength={8}
+          />
 
           <div className="flex items-start gap-2.5 pt-1">
             <input

@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { resetPasswordAction } from '@/app/(auth)/actions';
+import PasswordInput from './password-input';
 
 export default function ResetPasswordForm({ token, error }: { token?: string; error?: string }) {
   const hasToken = Boolean(token);
@@ -20,42 +21,20 @@ export default function ResetPasswordForm({ token, error }: { token?: string; er
         {hasToken ? (
           <form action={resetPasswordAction} className="mt-6 space-y-4">
             <input type="hidden" name="token" value={token} />
-            <div>
-              <label
-                htmlFor="new-password"
-                className="label-medium text-on-surface block font-medium"
-              >
-                New password
-              </label>
-              <input
-                id="new-password"
-                name="password"
-                type="password"
-                autoComplete="new-password"
-                minLength={8}
-                maxLength={200}
-                required
-                className="border-outline bg-surface-container-lowest text-on-surface focus:border-primary focus:ring-primary/20 mt-1 w-full rounded-xl border px-3.5 py-2.5 outline-none transition-all focus:ring-2"
-              />
-            </div>
-            <div>
-              <label
-                htmlFor="confirm-password"
-                className="label-medium text-on-surface block font-medium"
-              >
-                Confirm new password
-              </label>
-              <input
-                id="confirm-password"
-                name="confirmPassword"
-                type="password"
-                autoComplete="new-password"
-                minLength={8}
-                maxLength={200}
-                required
-                className="border-outline bg-surface-container-lowest text-on-surface focus:border-primary focus:ring-primary/20 mt-1 w-full rounded-xl border px-3.5 py-2.5 outline-none transition-all focus:ring-2"
-              />
-            </div>
+            <PasswordInput
+              id="new-password"
+              name="password"
+              label="New password"
+              autoComplete="new-password"
+              minLength={8}
+            />
+            <PasswordInput
+              id="confirm-password"
+              name="confirmPassword"
+              label="Confirm new password"
+              autoComplete="new-password"
+              minLength={8}
+            />
             <button
               type="submit"
               className="bg-primary text-on-primary text-label-large hover:bg-primary/90 w-full rounded-xl px-4 py-3 font-semibold shadow-sm transition-colors"

@@ -33,6 +33,16 @@ export default defineConfig({
     // green on a build that was never served. Always rebuild and start clean.
     reuseExistingServer: false,
     timeout: 180_000,
+    // `next start` sets NODE_ENV=production, and this suite is not a deployment:
+    // the payment workflow uploads a real proof through the UI and reads it back
+    // as an admin, which needs a filesystem to write to. So the production
+    // storage guard is satisfied by the explicit ephemeral-store opt-in rather
+    // than by relaxing the guard. Any proofs written during a run are discarded
+    // when the server exits, which is the truth about this server anyway.
+    env: {
+      PAYMENT_PROOF_STORE: 'local',
+      PAYMENT_PROOF_ALLOW_EPHEMERAL_STORE: '1',
+    },
   },
   projects: [
     {

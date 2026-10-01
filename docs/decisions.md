@@ -550,6 +550,57 @@ or production `test` mode also fails closed in `lib/payments/mode.ts`.
 
 ---
 
+## D-26 - Payment proofs are stored in Vercel Blob, and `local` is refused in production
+
+**Status:** PROPOSED - technical, no client input required. Hosting is settled
+under CR-08; the proof *store* was previously recorded as blocked on it.
+
+Phase 1 shipped payment proofs on the local filesystem, because hosting was
+PENDING (CR-04) and a directory is the smallest thing that satisfies SEC-004.
+Hosting is now Vercel, which invalidates that choice for production.
+
+**The problem.** A Vercel function's filesystem does not survive a redeploy. The
+failure is not a slow degradation — it is silent and permanent. The container is
+discarded, `Payment.proofUrl` keeps pointing at bytes that no longer exist, and
+the member's financial evidence is gone with no error in the system, the logs, or
+the database. A payment in that state can never be verified or rejected, because
+the artefact an admin is meant to look at is gone.
+
+**Decision.** Storage is a driver behind `PAYMENT_PROOF_STORE` (`local` or
+`blob`) in `lib/payments/proofs.ts`, and Vercel Blob is the production store.
+`local` in production throws at the first operation rather than accumulating
+unrecoverable evidence. The exported surface and the key format are unchanged, so
+no caller and no existing row is affected by the switch.
+
+Cloudflare R2 was considered and rejected for Phase 1: it needs a static
+long-lived access key managed by hand, adds a large SDK dependency tree to a
+deliberately lean 7-dependency runtime, and buys vendor neutrality that the
+three-function seam already provides for close to free. The private store uses
+Vercel's auto-rotating OIDC token, so there is no long-lived credential in the
+environment at all.
+
+**Three properties are deliberate and should not be undone:**
+
+- Encryption happens *above* the driver. Every driver receives AES-256-GCM
+  ciphertext, so bucket access control is defence in depth rather than the
+  control that makes retaining receipts lawful, and no future driver can be
+  swapped in that stores plaintext.
+- Reads pass `useCache: false`. Vercel's private blobs can serve stale content for
+  up to 60 seconds. An admin who opens a proof immediately after a member
+  resubmits after a rejection (D-8) would otherwise be shown the *already
+  rejected* receipt and could verify against evidence that is no longer the
+  submission in question. This is a money-correctness property, not a
+  performance one.
+- `PAYMENT_PROOF_ALLOW_EPHEMERAL_STORE` exists solely because `next start` sets
+  `NODE_ENV=production` and the Playwright suite must write a real proof through
+  the UI. It is never set on a deployed host, so a production deploy that forgot
+  `PAYMENT_PROOF_STORE=blob` still fails loudly.
+
+**Not addressed here:** SEC-005 malware scanning of proofs remains an open gap,
+and is recorded as such rather than silently ticked off.
+
+---
+
 ## Client Decision Register - Production Roadmap
 
 This register translates the production implementation roadmap into decision
@@ -981,6 +1032,8 @@ D-16 is a technical design decision.
 - Add relational constraints for already-confirmed relationships without
   changing business behavior.
 - Keep the O'Free zero-price activation as the narrowly guarded D-1 exception.
+- Store payment proofs in Vercel Blob behind a `PAYMENT_PROOF_STORE` driver seam,
+  with `local` refused in production (D-26).
 
 ### D. Decisions that block implementation
 

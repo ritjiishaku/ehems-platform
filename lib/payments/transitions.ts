@@ -31,6 +31,7 @@ import { Prisma } from '@prisma/client';
 import type { Prisma as PrismaTypes } from '@prisma/client';
 import { prisma } from '@/lib/db/client';
 import { sendNotification } from '@/lib/notifications';
+import { settleOrderFromVerifiedPayment } from '@/lib/orders';
 import type { Kobo } from '@/lib/pricing/types';
 import { activateEnrolment } from './activate-enrolment';
 import { resolveTransition, type PaymentAction } from './state';
@@ -518,6 +519,20 @@ export async function verifyPayment(
         throw new Error(`Payment ${payment.id} could not be activated after verification`);
       }
 
+      // The order equivalent of the line above. A product order becomes `paid`
+      // here and nowhere else — no admin action does it — so "did the money
+      // arrive?" has exactly one answer (FR-049, BR-013).
+      const settledOrderId = await settleOrderFromVerifiedPayment(
+        tx,
+        {
+          id: payment.id,
+          orderId: payment.orderId,
+          userId: payment.userId,
+          amountKobo: payment.amountKobo,
+        },
+        adminId,
+      );
+
       const member = await tx.user.findUnique({
         where: { id: payment.userId },
         select: { id: true, email: true, name: true },
@@ -533,6 +548,7 @@ export async function verifyPayment(
         ok: true as const,
         status: verdict.to,
         enrolmentId: activation.ok ? activation.enrolmentId : null,
+        orderId: settledOrderId ? payment.orderId : null,
         recipient: member ? { userId: member.id, email: member.email, name: member.name } : null,
         tierName: enrolment?.tier.name ?? 'your tier',
       };

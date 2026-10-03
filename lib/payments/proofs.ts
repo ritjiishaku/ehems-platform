@@ -58,6 +58,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { open as unseal, proofKey, seal } from '@/lib/crypto/seal';
 
 /**
  * 4 MB. A phone photo of a receipt is 1-3 MB; a 10 MB file is not a receipt.
@@ -119,17 +120,7 @@ function storageRoot(): string {
  * message that says what to do, instead of at boot with a stack trace.
  */
 function encryptionKey(): Buffer {
-  const raw = process.env.PAYMENT_PROOF_ENCRYPTION_KEY;
-  if (!raw) {
-    throw new Error(
-      'PAYMENT_PROOF_ENCRYPTION_KEY is not set. Generate one with: openssl rand -base64 32',
-    );
-  }
-  const key = /^[0-9a-f]{64}$/i.test(raw) ? Buffer.from(raw, 'hex') : Buffer.from(raw, 'base64');
-  if (key.length !== 32) {
-    throw new Error('PAYMENT_PROOF_ENCRYPTION_KEY must decode to exactly 32 bytes');
-  }
-  return key;
+  return proofKey();
 }
 
 function startsWithMagic(bytes: Buffer, magic: readonly number[]): boolean {
@@ -416,22 +407,11 @@ async function proofStore(): Promise<ProofStore> {
  * ciphertext and none of them can be swapped for one that stores plaintext.
  */
 function encryptPayload(bytes: Buffer): Buffer {
-  const iv = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv('aes-256-gcm', encryptionKey(), iv);
-  const ciphertext = Buffer.concat([cipher.update(bytes), cipher.final()]);
-  return Buffer.concat([iv, cipher.getAuthTag(), ciphertext]);
+  return seal(bytes, encryptionKey());
 }
 
 function decryptPayload(raw: Buffer): Buffer {
-  if (raw.length < 28) {
-    throw new Error('Stored proof is truncated');
-  }
-  const iv = raw.subarray(0, 12);
-  const tag = raw.subarray(12, 28);
-
-  const decipher = crypto.createDecipheriv('aes-256-gcm', encryptionKey(), iv);
-  decipher.setAuthTag(tag);
-  return Buffer.concat([decipher.update(raw.subarray(28)), decipher.final()]);
+  return unseal(raw, encryptionKey());
 }
 
 /**

@@ -19,6 +19,7 @@ describe('Notification Service (Phase 4 Abstraction)', () => {
       event: 'WELCOME_REGISTRATION',
       recipient: { email: 'member@example.com', name: 'Dr. Aisha Bello' },
       payload: { name: 'Dr. Aisha Bello' },
+      channels: ['email'],
     });
 
     expect(res.success).toBe(true);

@@ -3,10 +3,14 @@
  *
  * Channel-agnostic notification abstraction allowing features to trigger
  * notifications without binding directly to specific vendor SDKs.
- * Primary channel in Phase 1 is `email`, with seams for `sms`, `whatsapp`, `telegram` (Phase 2).
+ *
+ * Phase 1 channels are `email` and `in_app` (PRD §18.2, CR-07). `in_app` is not a
+ * transport: it writes a `Notification` row the member reads in their dashboard,
+ * so it cannot fail on a third party's outage and is always attempted.
+ * `sms`/`whatsapp`/`telegram` remain Phase 2 seams.
  */
 
-export type NotificationChannel = 'email' | 'sms' | 'whatsapp' | 'telegram';
+export type NotificationChannel = 'email' | 'in_app' | 'sms' | 'whatsapp' | 'telegram';
 
 export type NotificationEventType =
   | 'WELCOME_REGISTRATION'

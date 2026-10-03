@@ -80,6 +80,7 @@ model User {
   payments                   Payment[]            @relation("PaymentUser")
   paymentsOpened             Payment[]            @relation("PaymentOpenedBy")
   paymentsVerified           Payment[]            @relation("PaymentVerifiedBy")
+  orders                     Order[]
 
   @@index([email])
   @@index([deletedAt])
@@ -260,6 +261,12 @@ model Notification {
   payload       Json?     @map("payload")
   sentAt        DateTime? @map("sent_at")
   failedAt      DateTime? @map("failed_at")
+// `readAt` is in-app only (CR-07): the row is "delivered" the moment it is
+  // written, so `sentAt` is set immediately and `readAt` tracks the member
+  // opening it. It is null forever on email/sms rows, which is why the
+  // unread-count query filters on `channel = 'in_app'` rather than `readAt IS
+  // NULL` — the latter would count every email ever sent.
+  readAt        DateTime? @map("read_at")
   failureReason String?   @map("failure_reason")
   createdAt     DateTime  @default(now()) @map("created_at")
 
@@ -267,6 +274,10 @@ model Notification {
 
   @@index([userId])
   @@index([channel, sentAt])
+  // Partial index backing the dashboard badge. The UNREAD count is the hot query
+  // — it runs on every dashboard load — so it must not have to scan a member's
+  // entire notification history.
+  @@index([userId, createdAt], map: "notification_user_inapp_created_idx")
   @@map("notification")
 }
 
@@ -284,11 +295,24 @@ model CommunityLink {
   url         String   @map("url")
   accessLevel String   @map("access_level")
   tierName    String?  @map("tier_name")
+  // A link may additionally be scoped to one programme: null applies to every
+  // programme, a value means "only members enrolled in this programme". A SINGLE
+  // programme, not a join table — the PRD (PRD §18.2 WhatsApp row) describes
+  // programme-specific rooms as one room per programme, and supporting several
+  // would mean deciding whether access is OR or AND across them. That question is
+  // unanswered, so the model refuses it rather than guessing (see D-28).
+  //
+  // Note this NARROWS access, never widens it: BR-011 grants general community
+  // access to every tier, so a programme-pinned link is a subset, not an upgrade.
+  programmeId String?  @map("programme_id")
   active      Boolean  @default(true) @map("active")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
+  programme Programme? @relation(fields: [programmeId], references: [id], onDelete: Cascade)
+
   @@index([accessLevel, active])
+  @@index([programmeId])
   @@map("community_link")
 }
 
@@ -308,35 +332,93 @@ model Product {
   priceKobo   Int      @map("price_kobo")
   currency    String   @default("NGN") @map("currency")
   active      Boolean  @default(true) @map("active")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  // PRD §16.3 `entitlement_granted`: does buying this product grant access to
+  // something (a community room, a digital download) that is tracked as a row in
+  // ProductEntitlement rather than inferred from the order. False for a plain book.
+  // This is a *flag*, not the grant — the grant is created when a linked Payment
+  // reaches Verified, exactly as a tier enrolment is (AGENTS.md §4).
+  entitlementGranted Boolean @default(false) @map("entitlement_granted")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
 
-  orders Order[]
+  orders       Order[]
+  entitlements ProductEntitlement[]
 
   @@index([active])
   @@map("product")
 }
 
 // ---------------------------------------------------------------------------
+// ProductEntitlement
+// ---------------------------------------------------------------------------
+// PRD §16.3. What an order for a Product actually unlocks. Community access is
+// deliberately modelled here rather than as a `product_type` value: PRD §16.3
+// lists product_type as (physical, digital), and AGENTS.md §3 BR-012 forbids a
+// member marketplace. Modelling "community access" as a product type is how you
+// end up with a purchasable community, so the access is an entitlement on a
+// product that may or may not grant one.
+//
+// entitlementType is data, not an enum: `community_access` is seeded now, and a
+// Phase 2 `digital_download` row needs no migration. Unknown types must be ignored
+// by readers rather than crash them.
+// ---------------------------------------------------------------------------
+model ProductEntitlement {
+  id               String   @id @default(cuid()) @map("id")
+  productId        String   @map("product_id")
+  entitlementType  String   @map("entitlement_type")
+  entitlementValue String   @map("entitlement_value")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  // One value per type per product. `general` and `ehems_open_sales` are the
+  // values CommunityLink.accessLevel already uses, so a product-granted room
+  // reuses that vocabulary instead of inventing a second one.
+  @@unique([productId, entitlementType], map: "product_entitlement_product_type_key")
+  @@index([entitlementType])
+  @@map("product_entitlement")
+}
+
+// ---------------------------------------------------------------------------
 // Order
 // ---------------------------------------------------------------------------
-// Records a member's product purchase intent. status: "pending" | "confirmed"
-// | "cancelled". Related to Product via OrderItem join.
+// A member's product purchase. PROVISIONAL STATUS VOCABULARY — see
+// docs/decisions.md (D-10). The PRD does not settle these values, so they are
+// recorded here as a technical recommendation and must be confirmed with the
+// client before launch.
+//
+// `fulfilment_type` is delivery|collection per PRD §16.3, and applies only to
+// *physical* products (BR-013: "Physical products fulfilled manually"). It is
+// nullable because a digital product is delivered on payment and has neither.
+// `delivery_address_encrypted` is likewise physical-only, and is AES-256-GCM
+// base64 from lib/crypto/seal.ts — never plaintext, since SEC-017 flags a home
+// address as sensitive data.
 // ---------------------------------------------------------------------------
 model Order {
-  id        String   @id @default(cuid()) @map("id")
-  userId    String   @map("user_id")
-  productId String   @map("product_id")
-  totalKobo Int      @map("total_kobo")
-  currency  String   @default("NGN") @map("currency")
-  status    String   @default("pending") @map("status")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id                      String   @id @default(cuid()) @map("id")
+  userId                  String   @map("user_id")
+  productId               String   @map("product_id")
+  quantity                Int      @default(1) @map("quantity")
+  totalKobo               Int      @map("total_kobo")
+  currency                String   @default("NGN") @map("currency")
+  status                  String   @default("pending_payment") @map("status")
+  fulfilmentType          String?  @map("fulfilment_type")
+  deliveryAddressEncrypted String? @map("delivery_address_encrypted")
+  // Snapshot of the product name at purchase time, so order history still reads
+  // correctly after a product is renamed or withdrawn.
+  productNameSnapshot     String   @map("product_name_snapshot")
+  createdAt               DateTime @default(now()) @map("created_at")
+  updatedAt               DateTime @updatedAt @map("updated_at")
 
   product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Restrict)
+  payments Payment[]
 
+  // The admin fulfilment queue filters on status, and members page their history
+  // by recency — both of which need these to stay indexed once orders exist.
   @@index([userId])
   @@index([productId])
+  @@index([status])
   @@map("order")
 }
 
@@ -429,6 +511,7 @@ model Programme {
   updatedAt           DateTime @updatedAt @map("updated_at")
 
   sessions   ProgrammeSession[]
+  communityLinks CommunityLink[]
   enrolments EnrolmentProgramme[]
   materials  Material[]
   tiers      ProgrammeTier[]
@@ -437,14 +520,20 @@ model Programme {
 }
 
 model ProgrammeSession {
-  id          String    @id @default(cuid()) @map("id")
-  programmeId String    @map("programme_id")
-  title       String    @map("title")
-  description String?   @map("description")
-  startsAt    DateTime  @map("starts_at")
+  id          String   @id @default(cuid()) @map("id")
+  programmeId String   @map("programme_id")
+  title       String   @map("title")
+  description String?  @map("description")
+  startsAt    DateTime @map("starts_at")
   endsAt      DateTime? @map("ends_at")
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
+  // PRD §16.2 locationType/locationDetails. Free text on purpose: meeting URLs
+  // rotate and live off-platform, the same reasoning that keeps CommunityLink.url
+  // an opaque string. Nullable with a `physical` default so the migration is
+  // additive over sessions that already exist.
+  locationType     String    @default("physical") @map("location_type") // physical | virtual | hybrid
+  locationDetails  String?   @map("location_details")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   programme         Programme          @relation(fields: [programmeId], references: [id], onDelete: Cascade)
   attendanceRecords AttendanceRecord[]
@@ -704,6 +793,11 @@ model Payment {
   id               String        @id @default(cuid()) @map("id")
   userId           String        @map("user_id")
   enrolmentId      String?       @map("enrolment_id")
+  // PRD §16.4. A Payment pays for exactly one thing: a tier enrolment or a product
+  // order, never both. The pair of nullable columns is a cheap CHECK (below) rather
+  // than two tables, and keeps one verification queue and one state machine for
+  // both — which is the point of the manual-payment model.
+  orderId          String?       @map("order_id")
   amountKobo       Int           @map("amount_kobo")
   currency         String        @default("NGN") @map("currency")
   paymentMethod    String?       @map("payment_method")
@@ -729,12 +823,14 @@ model Payment {
   // SetNull rather than Restrict: an enrolment that is cancelled must not take a
   // financial record with it. The payment outlives the enrolment it paid for.
   enrolment      Enrolment? @relation(fields: [enrolmentId], references: [id], onDelete: SetNull)
+  order          Order?     @relation(fields: [orderId], references: [id], onDelete: SetNull)
   openedByUser   User?      @relation("PaymentOpenedBy", fields: [openedBy], references: [id], onDelete: SetNull)
   verifiedByUser User?      @relation("PaymentVerifiedBy", fields: [verifiedBy], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@index([status])
   @@index([enrolmentId])
+  @@index([orderId])
   // PostgreSQL partial unique index in
   // 20260929150000_prevent_duplicate_pending_payments: one open purchase
   // intent per member; historical submitted/verified/rejected rows remain

@@ -27,6 +27,7 @@
  */
 
 import type { Prisma } from '@prisma/client';
+import { linkEnrolmentToProgrammes } from '@/lib/programmes';
 import { PAYMENT_STATUSES } from './types';
 
 type Tx = Prisma.TransactionClient;
@@ -67,6 +68,17 @@ export async function activateEnrolment(
     data: { status: 'active' },
   });
 
+  // Link the enrolment to every programme mapped to its tier, snapshotting each
+  // programme's attendance threshold. This is the only place a paid enrolment
+  // gains programme access, so it is also the only place the snapshot can be
+  // taken — see `linkEnrolmentToProgrammes` for why the threshold is copied
+  // rather than read live.
+  const linkedProgrammeCount = await linkEnrolmentToProgrammes(
+    tx,
+    payment.enrolment.id,
+    payment.enrolment.tierId,
+  );
+
   await tx.auditLog.create({
     data: {
       actorId: input.actorId,
@@ -79,6 +91,7 @@ export async function activateEnrolment(
         amountKobo: payment.amountKobo,
         currency: payment.currency,
         trigger: 'payment_verified',
+        linkedProgrammeCount,
       },
     },
   });

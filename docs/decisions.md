@@ -400,7 +400,7 @@ reference the user ID, which becomes a tombstone.
 
 ## D-21 - `Payment.orderId` is omitted until the Product/Order feature exists
 
-**Status:** PROPOSED - confirm with the client before the first product sale.
+**Status:** SUPERSEDED on 2026-10-02 by D-27. Kept for history.
 
 The `Payment` model has no `orderId`, even though PRD §16.4 puts an order
 reference on it. `Order`/`Product` is a separate in-scope Phase 1 feature
@@ -417,6 +417,12 @@ half-built seam AGENTS.md §9 warns against.
 is nullable - a product payment has no enrolment - and `activateEnrolment`
 already treats a missing enrolment as a successful non-error, so that case is
 handled. Only the column is missing, and it is additive.
+
+**Resolution:** see D-27. `Order`, `ProductEntitlement`, and `Payment.orderId`
+all landed together in `20261002143000_add_product_orders`, as D-21 predicted. One
+part of the prediction was wrong and is recorded in D-27: the "exactly one of
+enrolment/order" constraint is **not** expressible as a database CHECK, because
+both FKs are `ON DELETE SET NULL`.
 
 ---
 
@@ -609,6 +615,79 @@ framework body-limit error.
 
 **Not addressed here:** SEC-005 malware scanning of proofs remains an open gap,
 and is recorded as such rather than silently ticked off.
+
+---
+
+## D-27 - Order statuses are provisional and owned by the application, not the database
+
+**Status:** PROPOSED (technical recommendation). **Confirm with the client before
+the first product sale.** The user authorised building these provisionally rather
+than waiting; that authorisation covers *shipping the seam*, not the vocabulary.
+
+### The vocabulary, and why it is provisional
+
+The PRD never settles `Order.status`. PRD §16.3 names the column and §5/§18 imply
+a payment step, but no value list exists anywhere. These five values are ours:
+
+| Status                 | Meaning                                                 | Terminal |
+| ---------------------- | ------------------------------------------------------- | -------- |
+| `pending_payment`      | Order placed, payment intent open, nothing sent yet      | no       |
+| `awaiting_verification`| Proof uploaded, an admin has not approved it             | no       |
+| `paid`                 | Payment verified; a physical order awaits fulfilment     | no       |
+| `fulfilled`            | Delivered or collected                                   | yes      |
+| `cancelled`            | Withdrawn before payment                                 | yes      |
+
+They deliberately mirror the payment machine rather than inventing a parallel
+one. `paid` and `fulfilled` are separate because BR-013 makes physical fulfilment
+a *manual* act, so "the money arrived" and "the parcel went out" are different
+facts with different owners.
+
+### What is enforced where
+
+- **Database (`order_status_check`):** the value list, plus `quantity >= 1`,
+  `total_kobo >= 0`, `fulfilment_type IN (delivery, collection)`, and no address
+  without `delivery`.
+- **Domain (`lib/orders/`):** every transition, because the database cannot
+  express the interesting ones.
+- **UI:** labels only.
+
+### Three invariants the database cannot hold
+
+1. **`fulfilment_type` implies `product_type = 'physical'`** (BR-013). Needs a
+   subquery on another table, and PostgreSQL forbids subqueries in `CHECK`.
+   Asserted in `placeOrder`, pinned by `test/order-workflow.db.test.ts`.
+2. **"A Payment pays for exactly one of enrolment/order."** We tried this as
+   `CHECK ((enrolment_id IS NULL) <> (order_id IS NULL))` and it **failed against
+   real data**: both FKs are `ON DELETE SET NULL`, so deleting an enrolment leaves
+   its verified payment with both columns NULL. The constraint would have made it
+   impossible to delete an enrolment that has a payment against it — the opposite
+   of the safety it was meant to provide. The domain refuses to *create* a
+   both-set payment; the historical both-null state is indistinguishable from a
+   bug by SQL, so it is left alone.
+3. **`paid` is reachable only via a verified payment.** Enforced structurally:
+   `settleOrderFromVerifiedPayment` is called from inside `verifyPayment`'s
+   transaction and from nowhere else. There is no admin action that sets `paid`,
+   so "did the money actually arrive?" has exactly one answer.
+
+### Carried-over constraint
+
+`payment_one_pending_per_user` (20260929150000) allows one open payment per
+member across tiers **and** orders. That was deliberate for tiers and was not
+relaxed for orders: a member resolves their outstanding payment before opening
+another. `test/order-workflow.db.test.ts` pins it.
+
+### Also settled here
+
+- **Delivery addresses** are AES-256-GCM via `lib/crypto/seal.ts`, extracted from
+  `lib/payments/proofs.ts` so there is one reviewed cipher rather than two. Same
+  framing, so proofs sealed earlier are still readable. Key:
+  `ORDER_ADDRESS_ENCRYPTION_KEY`, falling back to the payment-proof key.
+- **Tier discounts do not apply to products.** BR-005/006/007 are about a
+  first-time subscriber's first Advanced-tier purchase; extending them to
+  products would invent a commercial policy the client never agreed to.
+- **`community_access` is an entitlement value**, reusing the vocabulary
+  `CommunityLink.accessLevel` already uses, so a product-granted room needs no
+  second vocabulary.
 
 ---
 
@@ -979,6 +1058,10 @@ decisions and implementation blockers that resolve or narrow PRD ambiguities.
 - **CR-09:** Final assets/content are required; delivery remains a launch input.
 - **CR-10:** Legal-approved retention schedule is required before production
   processing; exact periods and review ownership remain outstanding.
+- **D-27:** Order status vocabulary is a technical recommendation, not a client
+  decision. Confirm the five values (and whether `cancelled` is the right word
+  for a withdrawal) **before the first product sale**. Ship as-is in the meantime
+  — the user authorised building it provisionally.
 
 ### B. Decisions already confirmed
 

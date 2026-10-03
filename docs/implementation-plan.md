@@ -189,12 +189,12 @@ implementation:
 | 5 | Auth, sessions, consent capture | **implemented baseline** — production email delivery remains |
 | 6 | RBAC and permissions | **five-role code/seed aligned**; admin DSR queue implemented behind a direct role check (D-18), other admin areas remain |
 | 7 | Pricing engine | **engine live**; D-1/D-2 resolved; display/catalogue alignment remains |
-| 8 | Payments and manual verification | **not started**; decision blockers resolved |
-| 9 | Member dashboard | **not started**; decision blockers resolved |
-| 10 | Programme and session CMS | **schema present; CMS not started** |
-| 11 | Attendance, completion, certificates | **attendance/completion not started; certificate catalogue blocked on 27th name** |
-| 12 | Orders, feedback, community links | **after 6** |
-| 13 | NDPA operations | **after 5** |
+| 8 | Payments and manual verification | **live**; proof upload, encrypted storage, admin queue, verified-only activation, signed proof grants (D-23, D-26) |
+| 9 | Member dashboard | **live**; payments, pricing, certificates, materials, community, feedback, orders, profile, consent, data rights |
+| 10 | Programme and session CMS | **live**; tier mapping, session location, attendance-threshold snapshot at activation, deactivation instead of deletion |
+| 11 | Attendance, completion, certificates | **live**; manual attendance, BR-008 completion gate, issuance with public verification. Catalogue still blocked on the 27th name |
+| 12 | Orders, feedback, community links | **orders, feedback, community links all live.** Order statuses provisional (D-27) — confirm with client before first sale |
+| 13 | NDPA operations | **data-subject requests live**; breach-incident and retention operations not built |
 | 14 | Hardening and definition-of-done | last |
 
 The implementation sequence below remains the delivery plan. A missing

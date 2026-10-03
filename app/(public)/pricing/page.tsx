@@ -5,6 +5,7 @@ import { Section } from '@/components/ui/section';
 import { SectionHeading } from '@/components/ui/section-heading';
 import { LinkButton } from '@/components/ui/button';
 import { listActiveTiers, type TierId } from '@/lib/pricing';
+import { formatNaira } from '@/lib/format';
 
 export const metadata: Metadata = {
   title: 'Pricing & Membership Tiers | EHEMS Platform',
@@ -121,6 +122,22 @@ export default function PricingPage() {
                 </div>
 
                 <div className="mt-8 pt-4">
+                  {/* D-2: public pages show the official list price only. The
+                      first-purchase discounted figure is deliberately absent — it is
+                      an eligibility-dependent price, and publishing it here would
+                      advertise ₦375,000 to a returning member who will be charged
+                      the full list price on upgrade. The member sees their own
+                      figure on their dashboard, where eligibility has been
+                      computed. */}
+                  <p className="headline-small text-on-surface">
+                    {tier.isFree ? 'Free' : formatNaira(tier.priceKobo)}
+                  </p>
+                  <p className="body-medium text-on-surface-variant mt-1">
+                    {tier.isFree
+                      ? 'No payment required to join.'
+                      : 'One-time payment. Members who qualify see their own price in the member area.'}
+                  </p>
+
                   <LinkButton
                     href="/register"
                     variant={presentation.highlight ? 'primary' : 'secondary'}

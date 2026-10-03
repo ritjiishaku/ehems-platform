@@ -22,6 +22,7 @@ import { cookies } from 'next/headers';
 import { prisma } from '@/lib/db/client';
 import { sendNotification } from '@/lib/notifications';
 import { CONSENT_TEXT, CONSENT_VERSION } from '@/lib/ndpa/consent';
+import { linkEnrolmentToProgrammes } from '@/lib/programmes';
 import { hashPassword, passwordHashNeedsUpgrade, verifyPassword } from './password';
 import { ABSOLUTE_SESSION_MS, sessionExpiryAfterActivity } from './session-policy';
 import { MemberSafeError } from './member-safe-error';
@@ -180,6 +181,13 @@ export async function registerUser(input: {
         status: 'active',
       },
     });
+
+    // D-1: O'Free activates at creation because it has no payment. It therefore
+    // also has to link its programmes here, or `markAttendance` would reject every
+    // mark for an O'Free member for want of an `EnrolmentProgramme` row. This is
+    // the only O'Free-specific activation branch, which is why it is safe to keep
+    // it out of `activateEnrolment`.
+    await linkEnrolmentToProgrammes(tx, freeEnrolment.id, freeTier.id);
 
     await tx.consentRecord.create({
       data: {

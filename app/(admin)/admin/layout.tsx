@@ -40,8 +40,23 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             <Link href="/admin/attendance" className="hover:text-on-surface">
               Attendance
             </Link>
+            <Link href="/admin/programmes" className="hover:text-on-surface">
+              Programmes
+            </Link>
+            <Link href="/admin/community-links" className="hover:text-on-surface">
+              Community links
+            </Link>
+            <Link href="/admin/feedback" className="hover:text-on-surface">
+              Feedback
+            </Link>
+            <Link href="/admin/orders" className="hover:text-on-surface">
+              Orders
+            </Link>
             <Link href="/admin/completion" className="hover:text-on-surface">
               Completion
+            </Link>
+            <Link href="/admin/certificates" className="hover:text-on-surface">
+              Certificates
             </Link>
             {user.role === 'super_admin' ? (
               <Link href="/admin/payment-settings" className="hover:text-on-surface">

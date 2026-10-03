@@ -70,16 +70,26 @@ and data-subject request intake; Argon2id password hashing with legacy-hash
 upgrades; pricing calculations; a manual payment workflow (member proof upload
 with encrypted storage, admin verification queue, verified-only activation) and
 its admin/member screens; manual attendance marking per programme session with
-percentage recomputation; and manual completion review that gates every BR-008
-condition before an admin marks an enrolment completed. A Prisma schema/migration
-history contains the Phase 2A and decision-dependent programme, enrolment,
-material, role, tier, and certificate models. The seed targets the five approved
-roles; the certificate catalogue remains incomplete, and existing databases may
-retain legacy role rows. There is no payment gateway and no certificate issuance
-workflow yet.
+percentage recomputation; manual completion review that gates every BR-008
+condition before an admin marks an enrolment completed; certificate issuance with
+immutable member/admin views and public verification; tier-gated materials; an
+admin programme/session/material CMS whose mappings are consumed by both paid and
+O'Free activation, snapshotting each enrolment's attendance threshold at
+activation time; admin-managed community links; member feedback forms with
+reviewer-facing anonymity; and product orders with a manual fulfilment queue.
+There is no payment gateway. Product order statuses are provisional (D-27) and
+the order status vocabulary needs client confirmation before the first sale. NDPA
+breach-incident and retention operations and in-app notifications are not built.
+
+Two database facts the schema alone will not tell you, both learned the hard way
+in D-27: **`ON DELETE SET NULL` FKs make "exactly one of two nullable subjects"
+un-enforceable as a `CHECK` constraint** (deleting the subject legitimately nulls
+it), and **PostgreSQL forbids subqueries in `CHECK`**, so any rule spanning two
+tables has to live in `lib/` and be pinned by a test. Say so in the migration
+comment rather than leaving a gap that reads as covered.
 
 
-Three traps worth knowing before you touch the gates or the database:
+Six traps worth knowing before you touch the gates or the database:
 
 - **The `audit_log` protections are hand-written SQL, not schema.** Prisma cannot
   express triggers, so they live in `prisma/migrations/*_init/migration.sql` and
@@ -93,6 +103,21 @@ Three traps worth knowing before you touch the gates or the database:
 - **Never run Prettier over `styles/tokens.css`.** It is compared
   byte-for-byte by `check:tokens`; reformatting it makes `verify` permanently
   red. `.prettierignore` excludes it.
+- **`prisma migrate dev` is not usable here, and the reason is not the port.** It
+  wants a shadow database, and a dev server holding the query-engine DLL on
+  Windows makes it fail in a way that looks like a migration problem. Write the
+  SQL by hand into a timestamped directory and apply it with `npm run db:deploy`.
+  This is not a workaround — see D-27: the generated migration is *wrong* for
+  this schema. It emits `ADD COLUMN ... NOT NULL` with no default (fatal where
+  rows exist) and silently omits every `CHECK` and partial index, which is where
+  the real invariants live.
+- **`migrate resolve --rolled-back` after a failed hand-written migration.** The
+  file is a transaction, so the failure leaves no partial DDL — but the row is
+  recorded as failed and blocks every later `db:deploy` until it is marked
+  rolled back.
+- **`expect(x.ok).toBe(true)` does not narrow a union in TypeScript.** Vitest
+  assertions are not type guards, so `result.id` after an assertion is a
+  compile error. Add `if (!result.ok) throw ...` — a real guard, not a cast.
 - **`fs` calls on a runtime-computed path need a `turbopackIgnore` comment on a
   bare variable.** `lib/payments/proofs.ts` reads and writes encrypted receipts
   by a path it cannot know at build time, and without the annotation Turbopack
